@@ -5,6 +5,12 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // must match app.py's config.MAX_UPL
 let health = null;
 let selectedFile = null;
 
+// The exact bytes last sent to /api/v1/analyse (post-crop), kept only so a
+// successful cascade result can draw detection boxes over precisely what
+// the server saw -- box coordinates from the API are in that image's pixel
+// space, not the original uncropped photo's.
+let lastAnalysedBlob = null;
+
 // Crop/zoom tool state. `crop` is in CSS pixels relative to the displayed
 // (possibly scaled-down) preview image, NOT the photo's actual pixel
 // dimensions -- getCropRectNatural() converts between the two when it's
@@ -328,25 +334,60 @@ async function submitAnalysis() {
     ? new File([croppedBlob], "cropped.jpg", { type: "image/jpeg" })
     : selectedFile;
 
-  const form = new FormData();
-  form.append("image", imageToSend);
+  // Kept around so a successful result can draw detection boxes over the
+  // exact bytes the server actually analysed (see drawDetections).
+  lastAnalysedBlob = imageToSend;
 
   try {
-    const res = await fetch("/api/v1/analyse", { method: "POST", body: form });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail || `Request failed (${res.status})`);
-    }
-    renderResult(await res.json());
+    renderResult(await postForAnalysis(imageToSend));
   } catch (err) {
     const e = el("submitError");
-    e.textContent = err.message || "Something went wrong. Check your connection and try again.";
+    e.textContent = friendlySubmitError(err);
     e.hidden = false;
   } finally {
     el("analyseBtn").disabled = false;
     el("analyseBtnText").textContent = "Analyse photo";
     el("analyseSpinner").hidden = true;
   }
+}
+
+/** Thrown only for an HTTP response the server actually sent back (4xx/5xx)
+ * -- as opposed to fetch() itself throwing a plain TypeError, which happens
+ * when no response came back at all (dropped mobile connection, DNS blip,
+ * or a free-tier server that was still finishing waking up from idle). */
+class HttpError extends Error {}
+
+/** POSTs the image, retrying once after a short pause if the FIRST attempt
+ * never got an HTTP response at all. A real HTTP error response is not
+ * retried -- the server already answered, so trying again wouldn't change
+ * anything. This single retry is enough to ride out the two most common
+ * real-world causes of a bare "Failed to fetch": a brief mobile-network
+ * drop, and a Render free-tier instance that had gone to sleep and was
+ * still coming back up mid-request. */
+async function postForAnalysis(imageFile, attempt = 1) {
+  const form = new FormData();
+  form.append("image", imageFile);
+  try {
+    const res = await fetch("/api/v1/analyse", { method: "POST", body: form });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new HttpError(body.detail || `Request failed (${res.status})`);
+    }
+    return await res.json();
+  } catch (err) {
+    if (attempt < 2 && !(err instanceof HttpError)) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return postForAnalysis(imageFile, attempt + 1);
+    }
+    throw err;
+  }
+}
+
+function friendlySubmitError(err) {
+  if (err instanceof HttpError) return err.message;
+  return "Couldn't reach the server after a couple of tries. This can happen with a weak " +
+    "connection, or right after the server has been idle and is still waking back up -- " +
+    "wait a few seconds and tap Analyse photo again.";
 }
 
 // ---------------------------------------------------------------- //
@@ -449,6 +490,8 @@ function renderCascade(data) {
   tally.innerHTML = "";
   list.innerHTML = "";
 
+  drawDetections(data.detections);
+
   if (data.detections.length === 0) {
     const p = document.createElement("p");
     p.textContent = "No insects detected in this photo.";
@@ -483,6 +526,73 @@ function renderCascade(data) {
       : null;
     list.appendChild(detectionRow(d.taxon, d.confidence, d.flagged, false, runnerUp));
   });
+}
+
+// Matches the status-tag / tally-chip colour language elsewhere in the UI
+// (see style.css --red-700/--green-700/--grey-700), plus a distinct blue
+// for anything flagged below the 75% confirmation threshold (matching
+// .flagged-tag) so an unconfirmed guess never LOOKS as certain as a
+// confirmed one when drawn on the photo itself.
+const BOX_COLORS = { pest: "#b71c1c", beneficial: "#2e7d32", neutral: "#4a4a4a", flagged: "#0d47a1" };
+
+/** Draws the exact image the server analysed, with a box and label over
+ * each detection -- since the dataset this model trained on (Roboflow) is
+ * itself bounding-box annotated, showing those boxes back is the natural
+ * visual confirmation of what got detected, not just a text list. Box
+ * coordinates from the API are in the pixel space of the image that was
+ * actually sent (lastAnalysedBlob), which is why that exact blob -- not
+ * the original unmodified photo -- is what gets drawn underneath them. */
+function drawDetections(detections) {
+  const wrap = el("resultImageWrap");
+  if (!lastAnalysedBlob || detections.length === 0) {
+    wrap.hidden = true;
+    return;
+  }
+
+  const img = new Image();
+  const url = URL.createObjectURL(lastAnalysedBlob);
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const canvas = el("resultCanvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+
+    const lineWidth = Math.max(2, Math.round(img.naturalWidth / 250));
+    const fontSize = Math.max(14, Math.round(img.naturalWidth / 45));
+    ctx.font = `700 ${fontSize}px system-ui, sans-serif`;
+    ctx.textBaseline = "top";
+
+    detections.forEach((d) => {
+      const [x1, y1, x2, y2] = d.box;
+      const color = d.flagged ? BOX_COLORS.flagged : (BOX_COLORS[speciesStatus(d.taxon)] || BOX_COLORS.pest);
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+      const label = `${speciesLabel(d.taxon)} ${Math.round(d.confidence * 100)}%`;
+      const pad = Math.round(fontSize * 0.3);
+      const textW = ctx.measureText(label).width;
+      const labelH = fontSize + pad * 2;
+      // Label sits just above the box normally, but flips inside the top
+      // edge instead when the box is too close to the photo's edge for
+      // an above-box label to fit on the canvas at all.
+      const labelY = y1 - labelH >= 0 ? y1 - labelH : y1;
+      ctx.fillStyle = color;
+      ctx.fillRect(x1, labelY, textW + pad * 2, labelH);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(label, x1 + pad, labelY + pad);
+    });
+
+    wrap.hidden = false;
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(url);
+    wrap.hidden = true; // fall back to the text-only detection list below
+  };
+  img.src = url;
 }
 
 function renderClassifierOnly(data) {

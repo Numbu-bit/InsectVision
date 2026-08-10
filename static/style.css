@@ -151,6 +151,11 @@ summary:focus-visible {
 }
 
 .preview-state { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+/* Same `display` vs `[hidden]` precedence issue as .spinner above (see the
+   comment there) -- without this, #previewState (which starts `hidden` in
+   the markup, with an empty <img> inside) would render from page load,
+   before any photo is ever picked. */
+.preview-state[hidden] { display: none; }
 #previewImg {
   display: block;
   max-width: 100%;
@@ -231,6 +236,16 @@ summary:focus-visible {
   vertical-align: middle;
   animation: spin 0.7s linear infinite;
 }
+/* `.spinner { display: inline-block }` above otherwise wins over the
+   `hidden` attribute's UA-stylesheet `display: none` -- author rules that
+   set `display` on an element always beat the UA default regardless of
+   selector specificity or source order, so a plain `.spinner` rule alone
+   makes `hidden` a no-op on this element (and its `infinite` animation
+   keeps spinning even while "hidden"). This higher-specificity override
+   is what actually makes JS's `el("analyseSpinner").hidden = true` work. */
+.spinner[hidden] {
+  display: none;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------------------------------------------------------------- */
@@ -262,6 +277,14 @@ summary:focus-visible {
 /* ---------------------------------------------------------------- */
 /* Detections / tally                                                */
 /* ---------------------------------------------------------------- */
+
+/* The analysed photo with a box drawn around each detection (see
+   drawDetections in app.js) -- the canvas is sized to the photo's actual
+   pixel dimensions in JS and then just scaled down to fit here. */
+.result-image-wrap { text-align: center; margin-bottom: 16px; }
+.result-image-wrap[hidden] { display: none; }
+#resultCanvas { max-width: 100%; height: auto; border-radius: 10px; }
+
 .section-heading { font-size: 1rem; margin: 20px 0 8px; }
 
 .tally { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
