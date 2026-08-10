@@ -1,0 +1,415 @@
+/* InsectVision -- plain CSS, no build step.
+   Mobile-first and high-contrast on purpose: the primary user is a farmer
+   reading this on a mid-range phone screen in direct daylight, not a
+   developer on a calibrated monitor -- pastel colour-only distinctions
+   would be unreadable outdoors, so every status also carries a text label
+   and/or icon, never colour alone. */
+
+:root {
+  --green-700: #1b5e20;
+  --green-600: #2e7d32;
+  --green-100: #e8f5e9;
+  --amber-600: #e65100;
+  --amber-100: #fff3e0;
+  --red-700: #b71c1c;
+  --red-100: #ffebee;
+  --blue-700: #0d47a1;
+  --blue-100: #e3f2fd;
+  --grey-900: #1a1a1a;
+  --grey-700: #4a4a4a;
+  --grey-500: #757575;
+  --grey-300: #d0d0d0;
+  --grey-100: #f5f5f0;
+  --surface: #ffffff;
+  --page-bg: #f0f1ec;
+  --focus-ring: #1565c0;
+
+  --radius: 14px;
+  --gap: 16px;
+  --max-width: 640px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--page-bg);
+  color: var(--grey-900);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+/* Every interactive control gets a visible focus ring -- required for
+   keyboard accessibility, not optional polish. */
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.topbar {
+  background: var(--green-700);
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.topbar-inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.brand { font-size: 1.15rem; font-weight: 700; }
+.mode-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: rgba(255,255,255,0.18);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 16px;
+  padding-bottom: 48px;
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.card-title { margin: 0 0 4px; font-size: 1.4rem; }
+.card-title-sm { margin: 0 0 4px; font-size: 1.1rem; }
+.card-subtitle { margin: 0 0 16px; color: var(--grey-700); font-size: 0.95rem; }
+
+/* ---------------------------------------------------------------- */
+/* Supported-species reference list                                  */
+/* ---------------------------------------------------------------- */
+.species-group { margin-bottom: 14px; }
+.species-group:last-child { margin-bottom: 0; }
+.species-group-heading {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--grey-700);
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.species-chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.species-chip {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  text-transform: capitalize;
+}
+.species-chip.pest { background: var(--red-100); color: var(--red-700); }
+.species-chip.beneficial { background: var(--green-100); color: var(--green-700); }
+.species-chip.neutral { background: var(--grey-100); color: var(--grey-700); }
+
+/* ---------------------------------------------------------------- */
+/* Capture / dropzone                                                */
+/* ---------------------------------------------------------------- */
+.dropzone {
+  border: 2px dashed var(--grey-300);
+  border-radius: var(--radius);
+  padding: 24px 16px;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone.drag-over {
+  border-color: var(--green-600);
+  background: var(--green-100);
+}
+
+.empty-icon { font-size: 2.5rem; margin-bottom: 8px; }
+.empty-state p { margin: 0 0 16px; color: var(--grey-700); }
+
+.capture-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.dropzone-hint {
+  margin-top: 14px !important;
+  font-size: 0.85rem;
+  color: var(--grey-500);
+}
+
+.preview-state { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+#previewImg {
+  max-width: 100%;
+  max-height: 340px;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+/* ---------------------------------------------------------------- */
+/* Buttons -- large tap targets, minimum 44px per accessibility norms */
+/* ---------------------------------------------------------------- */
+.btn {
+  min-height: 44px;
+  padding: 10px 18px;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s, transform 0.05s;
+}
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-primary { background: var(--green-600); color: white; }
+.btn-primary:hover:not(:disabled) { background: var(--green-700); }
+
+.btn-secondary { background: var(--surface); color: var(--green-700); border-color: var(--green-600); }
+.btn-secondary:hover:not(:disabled) { background: var(--green-100); }
+
+.btn-large { width: 100%; min-height: 52px; font-size: 1.05rem; margin-top: 18px; }
+.btn-small { min-height: 38px; font-size: 0.9rem; padding: 6px 14px; }
+
+.spinner {
+  display: inline-block;
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.5);
+  border-top-color: white;
+  border-radius: 50%;
+  margin-left: 8px;
+  vertical-align: middle;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------------------------------------------------------------- */
+/* Form fields                                                       */
+/* ---------------------------------------------------------------- */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 18px;
+}
+@media (max-width: 420px) {
+  .form-grid { grid-template-columns: 1fr; }
+}
+
+.field label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+  color: var(--grey-700);
+}
+.field select,
+.field input[type="number"] {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 1rem;
+  border: 2px solid var(--grey-300);
+  border-radius: 10px;
+  font-family: inherit;
+  background: white;
+  color: var(--grey-900);
+}
+
+.field-error {
+  color: var(--red-700);
+  background: var(--red-100);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  margin-top: 12px;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- */
+/* Result: rejected / quality-gate failure                           */
+/* ---------------------------------------------------------------- */
+.reject-icon { font-size: 2.5rem; text-align: center; }
+#rejectedView h2, #notConfiguredCard h2 { text-align: center; margin: 6px 0; }
+.reject-reason {
+  text-align: center;
+  font-size: 1.05rem;
+  color: var(--grey-900);
+  font-weight: 600;
+}
+.reject-score-label { text-align: center; color: var(--grey-700); font-size: 0.9rem; }
+
+/* ---------------------------------------------------------------- */
+/* Result: severity band                                             */
+/* ---------------------------------------------------------------- */
+.severity-band {
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: center;
+  margin-bottom: 14px;
+}
+.severity-label { font-size: 1.15rem; font-weight: 800; letter-spacing: 0.02em; }
+
+.severity-none, .severity-low   { background: var(--green-100); color: var(--green-700); }
+.severity-moderate              { background: var(--amber-100); color: var(--amber-600); }
+.severity-high                  { background: var(--red-100);   color: var(--red-700); }
+.severity-review                { background: var(--blue-100);  color: var(--blue-700); }
+
+.advisory-text {
+  font-size: 1.02rem;
+  line-height: 1.55;
+  background: var(--grey-100);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.review-notice {
+  background: var(--blue-100);
+  color: var(--blue-700);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Detections / tally                                                */
+/* ---------------------------------------------------------------- */
+.section-heading { font-size: 1rem; margin: 20px 0 8px; }
+
+.tally { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.tally-chip {
+  background: var(--grey-100);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.tally-chip.pest { background: var(--red-100); color: var(--red-700); }
+.tally-chip.beneficial { background: var(--green-100); color: var(--green-700); }
+.tally-chip.neutral { background: var(--grey-100); color: var(--grey-700); }
+
+.detection-list { display: flex; flex-direction: column; gap: 10px; }
+
+.detection-row {
+  border: 1px solid var(--grey-300);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.detection-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.detection-name { font-weight: 700; text-transform: capitalize; }
+.status-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  margin-left: 6px;
+}
+.status-tag.pest { background: var(--red-100); color: var(--red-700); }
+.status-tag.beneficial { background: var(--green-100); color: var(--green-700); }
+.status-tag.neutral { background: var(--grey-100); color: var(--grey-700); }
+
+.flagged-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--blue-700);
+  background: var(--blue-100);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+/* Confidence bar with a visible tick at the 0.75 hard-rule threshold --
+   the threshold must be visually obvious, not just implied by colour. */
+.confidence-bar-wrap {
+  position: relative;
+  height: 10px;
+  background: var(--grey-100);
+  border-radius: 999px;
+  overflow: visible;
+}
+.confidence-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--green-600);
+}
+.confidence-bar-fill.below-threshold { background: var(--grey-500); }
+.confidence-threshold-tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 75%;
+  width: 2px;
+  background: var(--grey-900);
+}
+.confidence-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: var(--grey-700);
+  margin-top: 4px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Decision trail                                                    */
+/* ---------------------------------------------------------------- */
+.decision-trail {
+  margin-top: 20px;
+  border-top: 1px solid var(--grey-300);
+  padding-top: 14px;
+}
+.decision-trail summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+#decisionPath {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  font-size: 0.9rem;
+  color: var(--grey-700);
+}
+#decisionPath li { margin-bottom: 6px; }
+
+.latency-note {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--grey-500);
+  margin-top: 14px;
+}
+
+.footer {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 16px 32px;
+  color: var(--grey-500);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+code {
+  background: var(--grey-100);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}

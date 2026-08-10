@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: insectvision
+    runtime: python
+    region: frankfurt   # closest free region to Ghana
+    plan: free
+    buildCommand: "pip install -r requirements-deploy.txt"
+    startCommand: "uvicorn app:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9

@@ -1,0 +1,16 @@
+# Full local/dev environment: everything requirements-deploy.txt has, PLUS
+# training, ONNX export and test tooling. Render never installs this file --
+# only requirements-deploy.txt. Use this locally for scripts/prepare_data.py,
+# running the test suite, or reproducing what the Colab notebook does.
+-r requirements-deploy.txt
+
+torch==2.3.0
+torchvision==0.18.0
+ultralytics==8.2.0
+onnx==1.22.0
+scikit-learn==1.4.2
+pyyaml==6.0.3
+kaggle==2.2.4
+
+pytest==8.2.0
+pytest-cov==5.0.0

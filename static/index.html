@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>InsectVision</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand">🐛 InsectVision</span>
+    <span id="modeBadge" class="mode-badge" hidden></span>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ==================== WHAT CAN BE TESTED ==================== -->
+  <section id="supportedCard" class="card" hidden>
+    <h2 class="card-title-sm">What can this test for?</h2>
+    <p class="card-subtitle">Trained to recognise these species. Photos of anything else may still
+      run, but the result won't be reliable -- and any guess below 75% confidence is always
+      flagged for a human to check, never presented as certain.</p>
+    <div id="supportedGroups"></div>
+  </section>
+
+  <!-- ============================== CAPTURE ============================== -->
+  <section id="captureCard" class="card">
+    <h1 class="card-title">Scan a crop photo</h1>
+    <p class="card-subtitle">Point the camera at the leaf or insect. Hold steady, get close, avoid glare.</p>
+
+    <div id="dropzone" class="dropzone">
+      <div id="emptyState" class="empty-state">
+        <div class="empty-icon" aria-hidden="true">📷</div>
+        <p>Take a photo or choose one from your gallery</p>
+        <div class="capture-buttons">
+          <button type="button" id="takePhotoBtn" class="btn btn-primary">Take Photo</button>
+          <button type="button" id="chooseFileBtn" class="btn btn-secondary">Choose File</button>
+        </div>
+        <p class="dropzone-hint">or drag &amp; drop an image here</p>
+      </div>
+
+      <div id="previewState" class="preview-state" hidden>
+        <img id="previewImg" alt="Selected photo preview">
+        <button type="button" id="replaceBtn" class="btn btn-secondary btn-small">Replace photo</button>
+      </div>
+    </div>
+
+    <!-- capture="environment" opens the rear camera directly on phones -->
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+    <input type="file" id="galleryInput" accept="image/*" hidden>
+
+    <p id="fileError" class="field-error" role="alert" hidden></p>
+
+    <div class="form-grid">
+      <div class="field">
+        <label for="growthStage">Crop growth stage</label>
+        <select id="growthStage">
+          <option value="seedling">Seedling (susceptible)</option>
+          <option value="vegetative" selected>Vegetative (susceptible)</option>
+          <option value="tasselling">Tasselling (susceptible)</option>
+          <option value="flowering">Flowering (susceptible)</option>
+          <option value="maturity">Maturity (tolerant)</option>
+        </select>
+      </div>
+
+      <div class="field" id="countField" hidden>
+        <label for="observedCount">How many did you count?</label>
+        <input type="number" id="observedCount" min="1" step="1" value="1" inputmode="numeric">
+      </div>
+    </div>
+
+    <button type="button" id="analyseBtn" class="btn btn-primary btn-large" disabled>
+      <span id="analyseBtnText">Analyse photo</span>
+      <span id="analyseSpinner" class="spinner" hidden aria-hidden="true"></span>
+    </button>
+
+    <p id="submitError" class="field-error" role="alert" hidden></p>
+  </section>
+
+  <!-- ============================== RESULT ============================== -->
+  <section id="resultCard" class="card" hidden>
+
+    <div id="rejectedView" hidden>
+      <div class="reject-icon" aria-hidden="true">⚠️</div>
+      <h2>Photo not usable</h2>
+      <p id="rejectReason" class="reject-reason"></p>
+      <p class="reject-score-label">Quality score: <span id="rejectScore"></span> / 1.00 (needs ≥ 0.60)</p>
+      <button type="button" id="retakeBtn" class="btn btn-primary btn-large">Retake photo</button>
+    </div>
+
+    <div id="successView" hidden>
+      <div id="severityBand" class="severity-band">
+        <span id="severityLabel" class="severity-label"></span>
+      </div>
+
+      <p id="advisoryText" class="advisory-text"></p>
+
+      <div id="reviewNotice" class="review-notice" hidden>
+        ℹ️ This result needs confirmation from an extension officer before acting on it.
+      </div>
+
+      <!-- cascade mode: per-species tally + detection list -->
+      <div id="cascadeResults" hidden>
+        <h3 class="section-heading">Detections</h3>
+        <div id="tally" class="tally"></div>
+        <div id="detectionList" class="detection-list"></div>
+      </div>
+
+      <!-- classifier-only mode: top-3 predictions -->
+      <div id="classifierResults" hidden>
+        <h3 class="section-heading">Top matches</h3>
+        <div id="topPredictionsList" class="detection-list"></div>
+      </div>
+
+      <details class="decision-trail">
+        <summary>How this was decided</summary>
+        <ol id="decisionPath"></ol>
+      </details>
+
+      <p class="latency-note">Analysed in <span id="latencyMs"></span></p>
+
+      <button type="button" id="scanAnotherBtn" class="btn btn-primary btn-large">Scan another</button>
+    </div>
+  </section>
+
+  <section id="notConfiguredCard" class="card" hidden>
+    <div class="reject-icon" aria-hidden="true">🧪</div>
+    <h2>No trained model yet</h2>
+    <p>The classifier hasn't been trained and deployed yet, so scans can't run. See
+      <code>notebooks/train_cascade_colab.ipynb</code>.</p>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <p>InsectVision is decision support, not an authority. It never recommends a specific
+    pesticide product or dose, and any identification below 75% confidence is always
+    referred to a human for review.</p>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

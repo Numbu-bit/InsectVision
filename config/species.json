@@ -1,0 +1,99 @@
+{
+  "detector_onnx": "models/detector.onnx",
+  "classifier_onnx": "models/classifier.onnx",
+  "detector_input_size": 640,
+  "classifier_input_size": 224,
+  "class_names": [
+    "ants",
+    "bees",
+    "beetle",
+    "catterpillar",
+    "earthworms",
+    "earwig",
+    "grasshopper",
+    "moth",
+    "slug",
+    "snail",
+    "wasp",
+    "weevil"
+  ],
+  "taxon_status": {
+    "ants": "neutral",
+    "bees": "beneficial",
+    "beetle": "pest",
+    "catterpillar": "pest",
+    "earthworms": "beneficial",
+    "earwig": "pest",
+    "grasshopper": "pest",
+    "moth": "pest",
+    "slug": "pest",
+    "snail": "pest",
+    "wasp": "neutral",
+    "weevil": "pest"
+  },
+  "economic_thresholds": {},
+  "species_info": {
+    "ants": {
+      "common_name": "Ants",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    },
+    "bees": {
+      "common_name": "Bees",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    },
+    "beetle": {
+      "common_name": "Beetle",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    },
+    "catterpillar": {
+      "common_name": "Caterpillar",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    },
+    "earthworms": {
+      "common_name": "Earthworms",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    },
+    "earwig": {
+      "common_name": "Earwig",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    },
+    "grasshopper": {
+      "common_name": "Grasshopper",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    },
+    "moth": {
+      "common_name": "Moth",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    },
+    "slug": {
+      "common_name": "Slug",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    },
+    "snail": {
+      "common_name": "Snail",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    },
+    "wasp": {
+      "common_name": "Wasp",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    },
+    "weevil": {
+      "common_name": "Weevil",
+      "scientific_name": "",
+      "damage_symptoms": ""
+    }
+  },
+  "classifier_macro_f1": 0.9440926913280783,
+  "detector_map50": 0.9636
+}

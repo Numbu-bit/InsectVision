@@ -1,0 +1,28 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# datasets -- large, and fully reproducible via scripts/prepare_data.py
+# (classifier data) and the Colab notebook (detector data). See README.
+data/
+
+# trained model weights ARE committed (models/*.onnx, both well under
+# GitHub's 100 MB limit) -- that's what lets Render serve real predictions
+# without a separate upload step. Only exclude the by-products that
+# shouldn't ship: raw torch checkpoints and external-data sidecars.
+models/*.pt
+models/*.onnx.data
+
+# Colab upload artifact -- rebuild with Compress-Archive, not versioned
+insectvision_code.zip
+
+# ultralytics training runs, if any land inside the project dir
+runs/
+
+notebooks/.ipynb_checkpoints/
+
+.env
+.venv/
+venv/

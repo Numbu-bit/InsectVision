@@ -1,0 +1,12 @@
+# Serve-time dependencies ONLY -- what actually runs on Render.
+# Deliberately no torch, no ultralytics, no OpenCV: app.py and everything
+# it imports (src/classifier_onnx.py, src/detector_onnx.py, src/imageops.py)
+# is built entirely on ONNX Runtime + Pillow + numpy so the whole service
+# fits comfortably in Render's free-tier memory budget.
+fastapi==0.140.0
+uvicorn[standard]==0.51.0
+python-multipart==0.0.32
+pydantic==2.13.4
+onnxruntime==1.26.0
+pillow==12.1.1
+numpy==1.26.4
