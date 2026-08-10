@@ -19,16 +19,16 @@
 
   <!-- ==================== WHAT CAN BE TESTED ==================== -->
   <section id="supportedCard" class="card" hidden>
-    <h2 class="card-title-sm">What can this test for?</h2>
+    <h2 class="card-title-sm">What can this identify?</h2>
     <p class="card-subtitle">Trained to recognise these species. Photos of anything else may still
       run, but the result won't be reliable -- and any guess below 75% confidence is always
-      flagged for a human to check, never presented as certain.</p>
+      flagged as uncertain, never presented as certain.</p>
     <div id="supportedGroups"></div>
   </section>
 
   <!-- ============================== CAPTURE ============================== -->
   <section id="captureCard" class="card">
-    <h1 class="card-title">Scan a crop photo</h1>
+    <h1 class="card-title">Scan a photo</h1>
     <p class="card-subtitle">Get close so the insect fills most of the frame. Once you've picked a
       photo, drag the box to zoom in even more if it's still small in the picture.</p>
 
@@ -69,24 +69,6 @@
 
     <p id="fileError" class="field-error" role="alert" hidden></p>
 
-    <div class="form-grid">
-      <div class="field">
-        <label for="growthStage">How grown is the crop?</label>
-        <select id="growthStage">
-          <option value="seedling">Just planted (seedling)</option>
-          <option value="vegetative" selected>Growing leaves, no flowers yet</option>
-          <option value="tasselling">Buds or flowers starting to form</option>
-          <option value="flowering">Flowering</option>
-          <option value="maturity">Almost ready to harvest</option>
-        </select>
-      </div>
-
-      <div class="field" id="countField" hidden>
-        <label for="observedCount">How many did you count?</label>
-        <input type="number" id="observedCount" min="1" step="1" value="1" inputmode="numeric">
-      </div>
-    </div>
-
     <button type="button" id="analyseBtn" class="btn btn-primary btn-large" disabled>
       <span id="analyseBtnText">Analyse photo</span>
       <span id="analyseSpinner" class="spinner" hidden aria-hidden="true"></span>
@@ -107,16 +89,6 @@
     </div>
 
     <div id="successView" hidden>
-      <div id="severityBand" class="severity-band">
-        <span id="severityLabel" class="severity-label"></span>
-      </div>
-
-      <p id="advisoryText" class="advisory-text"></p>
-
-      <div id="reviewNotice" class="review-notice" hidden>
-        ℹ️ This result needs confirmation from an extension officer before acting on it.
-      </div>
-
       <!-- cascade mode: per-species tally + detection list -->
       <div id="cascadeResults" hidden>
         <h3 class="section-heading">Detections</h3>
@@ -129,11 +101,6 @@
         <h3 class="section-heading">Top matches</h3>
         <div id="topPredictionsList" class="detection-list"></div>
       </div>
-
-      <details class="decision-trail">
-        <summary>How this was decided</summary>
-        <ol id="decisionPath"></ol>
-      </details>
 
       <p class="latency-note">Analysed in <span id="latencyMs"></span></p>
 
@@ -151,9 +118,9 @@
 </main>
 
 <footer class="footer">
-  <p>InsectVision is decision support, not an authority. It never recommends a specific
-    pesticide product or dose, and any identification below 75% confidence is always
-    referred to a human for review.</p>
+  <p>InsectVision identifies insect species from a photo. It is not infallible, and any
+    identification below 75% confidence is always flagged as uncertain rather than presented
+    as fact.</p>
 </footer>
 
 <script src="/static/app.js"></script>

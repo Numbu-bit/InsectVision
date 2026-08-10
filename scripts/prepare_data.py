@@ -223,7 +223,6 @@ def main() -> None:
     cfg = json.loads(species_config_path.read_text()) if species_config_path.exists() else {}
     cfg["class_names"] = sorted(classes.keys())
     cfg["taxon_status"] = taxon_status
-    cfg.setdefault("economic_thresholds", {})
     cfg.setdefault("species_info", {})
     for taxon in classes:
         cfg["species_info"].setdefault(taxon, {

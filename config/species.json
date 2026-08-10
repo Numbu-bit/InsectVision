@@ -31,7 +31,6 @@
     "wasp": "neutral",
     "weevil": "pest"
   },
-  "economic_thresholds": {},
   "species_info": {
     "ants": {
       "common_name": "Ants",

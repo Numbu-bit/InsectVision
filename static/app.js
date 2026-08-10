@@ -1,12 +1,6 @@
 // InsectVision -- plain JS, no build step, no framework.
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // must match app.py's config.MAX_UPLOAD_BYTES
-const SEVERITY_LABELS = {
-  none: "No concern",
-  low: "Low risk",
-  moderate: "Moderate risk",
-  high: "High risk",
-};
 
 let health = null;
 let selectedFile = null;
@@ -47,12 +41,6 @@ async function init() {
   const badge = el("modeBadge");
   badge.hidden = false;
   badge.textContent = health.mode === "cascade" ? "Auto-counting" : "Manual count";
-
-  // The count field only matters in classifier-only mode -- cascade mode
-  // counts detections itself, so asking the user to also type a number
-  // would be redundant and confusing about which number actually drives
-  // the severity decision.
-  el("countField").hidden = health.mode === "cascade";
 
   wireEvents();
 }
@@ -110,7 +98,10 @@ function onFilePicked(file) {
   el("previewState").hidden = false;
   el("analyseBtn").disabled = false;
   // resetCrop() itself runs once the image has actually loaded and has
-  // real dimensions to measure -- wired via cropImgEl.onload in initCropper.
+  // real dimensions to measure -- wired via cropImgEl "load"/"error" in
+  // initCropper(). Until then the crop box stays hidden (see
+  // initCropper) rather than showing at whatever stale/zero position it
+  // last had -- its darkening effect covers the full page otherwise.
 }
 
 // ---------------------------------------------------------------- //
@@ -128,7 +119,16 @@ function initCropper() {
   cropImgEl = el("previewImg");
   cropBoxEl = el("cropBox");
 
+  // The crop box starts hidden and ONLY becomes visible once
+  // renderCropBox() has run with real, measured dimensions (see
+  // resetCrop/zoomToCenter). Its darkening effect is a box-shadow with a
+  // huge spread, which still covers the entire page even when the box
+  // itself is sized 0x0 -- so it must never be shown before a real
+  // position exists, not just left at whatever it defaulted to.
+  cropBoxEl.hidden = true;
+
   cropImgEl.addEventListener("load", resetCrop);
+  cropImgEl.addEventListener("error", onPreviewImageError);
 
   cropBoxEl.addEventListener("pointerdown", (e) => {
     if (e.target === cropBoxEl) startDrag(e, "move");
@@ -167,10 +167,29 @@ function zoomToCenter() {
 }
 
 function renderCropBox() {
+  cropBoxEl.hidden = false;
   cropBoxEl.style.left = crop.x + "px";
   cropBoxEl.style.top = crop.y + "px";
   cropBoxEl.style.width = crop.w + "px";
   cropBoxEl.style.height = crop.h + "px";
+}
+
+/** Fires when the browser can't decode the selected file as an image --
+ * most commonly a HEIC/HEIF photo (the default format on many iPhones),
+ * which plenty of browsers accept as a file but can't render in an <img>
+ * tag. Without this handler the page was left showing a broken-image icon
+ * with the crop tool's full-page darkening stuck on, since resetCrop()
+ * (which is what reveals the crop box) never runs when "load" never fires. */
+function onPreviewImageError() {
+  // resetCapture() itself calls hideFileError() -- it must run BEFORE
+  // showFileError(), not after, or it immediately wipes the very message
+  // this function exists to show.
+  resetCapture();
+  showFileError(
+    "That photo couldn't be opened -- your browser may not support its format " +
+    "(this happens with HEIC photos from some phones). Try a different photo, " +
+    "or save/export it as JPEG or PNG first."
+  );
 }
 
 function clampCrop() {
@@ -244,6 +263,8 @@ async function cropToBlob() {
 
 function resetCapture() {
   selectedFile = null;
+  crop = null;
+  if (cropBoxEl) cropBoxEl.hidden = true; // avoid its full-page darkening lingering into the empty state
   el("cameraInput").value = "";
   el("galleryInput").value = "";
   el("emptyState").hidden = false;
@@ -290,8 +311,6 @@ async function submitAnalysis() {
 
   const form = new FormData();
   form.append("image", imageToSend);
-  form.append("growth_stage", el("growthStage").value);
-  form.append("observed_count", el("observedCount").value || "1");
 
   try {
     const res = await fetch("/api/v1/analyse", { method: "POST", body: form });
@@ -390,26 +409,6 @@ function renderResult(data) {
   el("rejectedView").hidden = true;
   el("successView").hidden = false;
 
-  const decision = data.decision;
-  const needsReview = decision.action === "flag_for_review";
-
-  const band = el("severityBand");
-  band.className = "severity-band severity-" + (needsReview ? "review" : decision.severity);
-  el("severityLabel").textContent = needsReview
-    ? "Needs expert review"
-    : SEVERITY_LABELS[decision.severity] || decision.severity;
-
-  el("advisoryText").textContent = decision.advisory;
-  el("reviewNotice").hidden = !(decision.flagged && decision.flagged.length > 0);
-
-  const pathList = el("decisionPath");
-  pathList.innerHTML = "";
-  (decision.path || []).forEach((step) => {
-    const li = document.createElement("li");
-    li.textContent = step;
-    pathList.appendChild(li);
-  });
-
   el("latencyMs").textContent = `${Math.round(data.latency_ms)} ms`;
 
   if (data.mode === "cascade") {
@@ -471,11 +470,10 @@ function renderClassifierOnly(data) {
   const list = el("topPredictionsList");
   list.innerHTML = "";
   data.top_predictions.forEach((p, i) => {
-    // top_predictions[0] is always the one actually fed into the decision
-    // tree (see app.py) -- marking it avoids the user wondering which of
-    // the three numbers the advisory above is actually about. All three
-    // are already listed as separate rows here, so no extra runner-up
-    // note is needed the way cascade mode's single-row-per-box needs one.
+    // top_predictions[0] is the model's best guess -- marked so it's clear
+    // which of the three numbers is the primary answer. All three are
+    // already listed as separate rows here, so no extra runner-up note is
+    // needed the way cascade mode's single-row-per-box needs one.
     list.appendChild(detectionRow(p.taxon, p.confidence, p.confidence < 0.75, i === 0, null));
   });
 }
@@ -499,7 +497,7 @@ function detectionRow(taxon, confidence, flagged, isBest, runnerUp) {
     const bestTag = document.createElement("span");
     bestTag.className = "status-tag beneficial";
     bestTag.style.marginLeft = "4px";
-    bestTag.textContent = "used";
+    bestTag.textContent = "best match";
     nameSpan.appendChild(bestTag);
   }
   if (flagged) {

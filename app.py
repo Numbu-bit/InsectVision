@@ -4,20 +4,26 @@ a single Render instance serves both the JSON API and the static UI (Step 5)
 from the same origin, so there's no CORS configuration to get wrong and no
 second deployment to keep in sync.
 
+A general-purpose insect identifier: given a photo, say what species it
+looks like, how confident that guess is, and whether that species is
+generally a pest, beneficial, or neutral. Nothing about crop type, growth
+stage, or advisory follows from that -- this app deliberately doesn't
+guess at things it was never told.
+
     uvicorn app:app --reload
 """
 import json
 import time
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src import config
 from src.classifier_onnx import ClassifierOnnx
-from src.decision_tree import CONFIDENCE_THRESHOLD, Identification, TaxonStatus, evaluate
+from src.decision_tree import CONFIDENCE_THRESHOLD
 from src.detector_onnx import YoloOnnxDetector
 from src.imageops import assess_quality, load_image
 
@@ -80,11 +86,6 @@ def get_detector() -> YoloOnnxDetector:
     return _detector
 
 
-def get_taxon_status() -> dict[str, TaxonStatus]:
-    cfg = get_species_cfg()
-    return {k: TaxonStatus(v) for k, v in cfg.get("taxon_status", {}).items()}
-
-
 # --------------------------------------------------------------------- #
 # Schemas
 # --------------------------------------------------------------------- #
@@ -99,9 +100,11 @@ class DetectionOut(BaseModel):
     objectness: float
     taxon: str
     confidence: float
+    # HARD RULE: True whenever confidence < CONFIDENCE_THRESHOLD -- the UI
+    # must never present a flagged identification as confirmed.
     flagged: bool
     # Second-best guess for this same box, shown alongside the first so a
-    # farmer sees when the model is choosing between two look-alikes (e.g.
+    # user sees when the model is choosing between two look-alikes (e.g.
     # weevil vs beetle -- weevils are taxonomically a type of beetle, so
     # the classifier splitting confidence between them is expected) rather
     # than a single label presented with false certainty.
@@ -114,20 +117,11 @@ class TopPredictionOut(BaseModel):
     confidence: float
 
 
-class DecisionOut(BaseModel):
-    severity: str
-    action: str
-    advisory: str
-    path: list[str]
-    flagged: list[TopPredictionOut] = []
-
-
 class AnalyseResponse(BaseModel):
     mode: str
     quality: QualityOut
-    detections: list[DetectionOut] = []
-    top_predictions: list[TopPredictionOut] = []
-    decision: Optional[DecisionOut] = None
+    detections: list[DetectionOut] = []       # cascade mode
+    top_predictions: list[TopPredictionOut] = []  # classifier-only mode
     latency_ms: float
 
 
@@ -165,9 +159,7 @@ def health():
 
 
 @app.post("/api/v1/analyse", response_model=AnalyseResponse)
-async def analyse(image: UploadFile = File(...),
-                  growth_stage: str = Form("vegetative"),
-                  observed_count: int = Form(1)):
+async def analyse(image: UploadFile = File(...)):
     start = time.perf_counter()
 
     if image.content_type not in {"image/jpeg", "image/png", "image/webp",
@@ -201,13 +193,8 @@ async def analyse(image: UploadFile = File(...),
                             "notebooks/train_cascade_colab.ipynb, then drop "
                             "classifier.onnx into models/.")
 
-    taxon_status = get_taxon_status()
-    cfg = get_species_cfg()
-    economic_thresholds = cfg.get("economic_thresholds", {})
-
     detections_out: list[DetectionOut] = []
     top_predictions_out: list[TopPredictionOut] = []
-    identifications: list[Identification] = []
 
     if mode == "cascade":
         detector = get_detector()
@@ -223,36 +210,22 @@ async def analyse(image: UploadFile = File(...),
             candidates = classifier.classify(crop, top_k=2)
             top = candidates[0]
             runner_up = candidates[1] if len(candidates) > 1 else None
-            flagged = top.confidence < CONFIDENCE_THRESHOLD
             detections_out.append(DetectionOut(
                 box=[x1, y1, x2, y2], objectness=det.objectness,
-                taxon=top.taxon, confidence=top.confidence, flagged=flagged,
+                taxon=top.taxon, confidence=top.confidence,
+                flagged=top.confidence < CONFIDENCE_THRESHOLD,
                 runner_up_taxon=runner_up.taxon if runner_up else None,
                 runner_up_confidence=runner_up.confidence if runner_up else None))
-            identifications.append(Identification(taxon=top.taxon, confidence=top.confidence, count=1))
-    else:  # classifier_only -- whole image is one specimen, count is manual
+    else:  # classifier_only -- whole image treated as one specimen
         classifier = get_classifier()
         top3 = classifier.classify(img, top_k=3)
         top_predictions_out = [TopPredictionOut(taxon=t.taxon, confidence=t.confidence) for t in top3]
-
-        best = top3[0]
-        count = max(1, observed_count)
-        identifications.append(Identification(taxon=best.taxon, confidence=best.confidence, count=count))
-
-    decision = evaluate(identifications, taxon_status, growth_stage, economic_thresholds)
 
     return AnalyseResponse(
         mode=mode,
         quality=QualityOut(score=quality.score, passed=True),
         detections=detections_out,
         top_predictions=top_predictions_out,
-        decision=DecisionOut(
-            severity=decision.severity.value,
-            action=decision.action,
-            advisory=decision.advisory,
-            path=decision.path,
-            flagged=[TopPredictionOut(taxon=f.taxon, confidence=f.confidence) for f in decision.flagged],
-        ),
         latency_ms=(time.perf_counter() - start) * 1000,
     )
 
