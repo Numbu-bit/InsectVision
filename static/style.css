@@ -150,13 +150,50 @@ summary:focus-visible {
   color: var(--grey-500);
 }
 
-.preview-state { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.preview-state { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 #previewImg {
+  display: block;
   max-width: 100%;
   max-height: 340px;
   border-radius: 10px;
-  object-fit: contain;
 }
+
+/* Crop/zoom tool: a draggable, resizable box over the preview so a user
+   can tighten framing around a small/distant insect after the fact --
+   the actual camera viewfinder (native OS camera app via capture=
+   "environment") isn't something a web page can overlay or control, so
+   this is the closest equivalent to "zoom in before analysing" achievable
+   in a browser. */
+.crop-container {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  touch-action: none; /* let pointer events handle drag without the page also scrolling */
+}
+.crop-box {
+  position: absolute;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+  cursor: move;
+  border-radius: 4px;
+}
+.crop-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  margin: -10px;
+  background: white;
+  border: 2px solid var(--green-600);
+  border-radius: 50%;
+  touch-action: none;
+}
+.crop-handle[data-handle="nw"] { top: 0; left: 0; cursor: nwse-resize; }
+.crop-handle[data-handle="ne"] { top: 0; right: 0; margin-right: -10px; cursor: nesw-resize; }
+.crop-handle[data-handle="sw"] { bottom: 0; left: 0; margin-bottom: -10px; cursor: nesw-resize; }
+.crop-handle[data-handle="se"] { bottom: 0; right: 0; margin-bottom: -10px; margin-right: -10px; cursor: nwse-resize; }
+
+.crop-hint { margin: 0; font-size: 0.82rem; color: var(--grey-500); text-align: center; }
+.preview-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 
 /* ---------------------------------------------------------------- */
 /* Buttons -- large tap targets, minimum 44px per accessibility norms */
@@ -368,6 +405,13 @@ summary:focus-visible {
   font-size: 0.78rem;
   color: var(--grey-700);
   margin-top: 4px;
+}
+
+.runner-up-note {
+  font-size: 0.78rem;
+  color: var(--grey-500);
+  font-style: italic;
+  margin-top: 6px;
 }
 
 /* ---------------------------------------------------------------- */

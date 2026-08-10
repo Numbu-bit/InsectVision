@@ -100,6 +100,13 @@ class DetectionOut(BaseModel):
     taxon: str
     confidence: float
     flagged: bool
+    # Second-best guess for this same box, shown alongside the first so a
+    # farmer sees when the model is choosing between two look-alikes (e.g.
+    # weevil vs beetle -- weevils are taxonomically a type of beetle, so
+    # the classifier splitting confidence between them is expected) rather
+    # than a single label presented with false certainty.
+    runner_up_taxon: Optional[str] = None
+    runner_up_confidence: Optional[float] = None
 
 
 class TopPredictionOut(BaseModel):
@@ -213,11 +220,15 @@ async def analyse(image: UploadFile = File(...),
             if crop.size[0] < 4 or crop.size[1] < 4:
                 continue  # degenerate box from an unusable region -- skip rather than crash
 
-            top = classifier.classify(crop, top_k=1)[0]
+            candidates = classifier.classify(crop, top_k=2)
+            top = candidates[0]
+            runner_up = candidates[1] if len(candidates) > 1 else None
             flagged = top.confidence < CONFIDENCE_THRESHOLD
             detections_out.append(DetectionOut(
                 box=[x1, y1, x2, y2], objectness=det.objectness,
-                taxon=top.taxon, confidence=top.confidence, flagged=flagged))
+                taxon=top.taxon, confidence=top.confidence, flagged=flagged,
+                runner_up_taxon=runner_up.taxon if runner_up else None,
+                runner_up_confidence=runner_up.confidence if runner_up else None))
             identifications.append(Identification(taxon=top.taxon, confidence=top.confidence, count=1))
     else:  # classifier_only -- whole image is one specimen, count is manual
         classifier = get_classifier()

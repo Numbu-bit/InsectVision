@@ -29,7 +29,8 @@
   <!-- ============================== CAPTURE ============================== -->
   <section id="captureCard" class="card">
     <h1 class="card-title">Scan a crop photo</h1>
-    <p class="card-subtitle">Point the camera at the leaf or insect. Hold steady, get close, avoid glare.</p>
+    <p class="card-subtitle">Get close so the insect fills most of the frame. Once you've picked a
+      photo, drag the box to zoom in even more if it's still small in the picture.</p>
 
     <div id="dropzone" class="dropzone">
       <div id="emptyState" class="empty-state">
@@ -43,8 +44,22 @@
       </div>
 
       <div id="previewState" class="preview-state" hidden>
-        <img id="previewImg" alt="Selected photo preview">
-        <button type="button" id="replaceBtn" class="btn btn-secondary btn-small">Replace photo</button>
+        <div id="cropContainer" class="crop-container">
+          <img id="previewImg" alt="Selected photo preview">
+          <div id="cropBox" class="crop-box">
+            <div class="crop-handle" data-handle="nw"></div>
+            <div class="crop-handle" data-handle="ne"></div>
+            <div class="crop-handle" data-handle="sw"></div>
+            <div class="crop-handle" data-handle="se"></div>
+          </div>
+        </div>
+        <p class="crop-hint">If the insect looks small, drag the box tighter around it (or tap
+          "Zoom to center") before analysing.</p>
+        <div class="preview-actions">
+          <button type="button" id="zoomCenterBtn" class="btn btn-secondary btn-small">Zoom to center</button>
+          <button type="button" id="resetCropBtn" class="btn btn-secondary btn-small">Use full photo</button>
+          <button type="button" id="replaceBtn" class="btn btn-secondary btn-small">Replace photo</button>
+        </div>
       </div>
     </div>
 
@@ -56,13 +71,13 @@
 
     <div class="form-grid">
       <div class="field">
-        <label for="growthStage">Crop growth stage</label>
+        <label for="growthStage">How grown is the crop?</label>
         <select id="growthStage">
-          <option value="seedling">Seedling (susceptible)</option>
-          <option value="vegetative" selected>Vegetative (susceptible)</option>
-          <option value="tasselling">Tasselling (susceptible)</option>
-          <option value="flowering">Flowering (susceptible)</option>
-          <option value="maturity">Maturity (tolerant)</option>
+          <option value="seedling">Just planted (seedling)</option>
+          <option value="vegetative" selected>Growing leaves, no flowers yet</option>
+          <option value="tasselling">Buds or flowers starting to form</option>
+          <option value="flowering">Flowering</option>
+          <option value="maturity">Almost ready to harvest</option>
         </select>
       </div>
 

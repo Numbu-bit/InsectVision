@@ -100,10 +100,20 @@ def evaluate(identifications: list[Identification],
     if not confirmed:
         path.append(f"all {len(flagged)} identification(s) below confidence "
                     f"{CONFIDENCE_THRESHOLD}")
+        # Name the actual candidate(s) rather than a bare "not sure" --
+        # e.g. weevils and beetles are genuinely close look-alikes (weevils
+        # are taxonomically a type of beetle), so the model splitting
+        # confidence between them is expected, not a failure. Telling the
+        # farmer which two things it's choosing between is more useful
+        # than hiding behind a generic hedge, without pretending to be
+        # more certain than the confirmed HARD RULE allows.
+        candidates = sorted({f.taxon.replace("_", " ") for f in flagged})
+        names = " or ".join(candidates) if len(candidates) <= 2 else ", ".join(candidates)
         return Decision(Severity.NONE, "flag_for_review",
-                        "An insect was seen but the system is not confident "
-                        "enough to identify it. Please consult an extension "
-                        "officer to confirm the species.", path, flagged=flagged)
+                        f"An insect was seen, possibly {names}, but confidence is "
+                        "too low to be sure which. Please consult an extension "
+                        "officer to confirm the species before acting on this.",
+                        path, flagged=flagged)
     path.append(f"{len(confirmed)} confirmed, {len(flagged)} flagged for review")
 
     # D3 - aggregate confirmed counts per taxon (flagged ones never count

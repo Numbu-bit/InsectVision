@@ -11,6 +11,15 @@ const SEVERITY_LABELS = {
 let health = null;
 let selectedFile = null;
 
+// Crop/zoom tool state. `crop` is in CSS pixels relative to the displayed
+// (possibly scaled-down) preview image, NOT the photo's actual pixel
+// dimensions -- getCropRectNatural() converts between the two when it's
+// time to actually cut the image.
+let crop = null;
+let cropContainerEl, cropBoxEl, cropImgEl;
+let activeDrag = null; // { type: "move"|"nw"|"ne"|"sw"|"se", startX, startY, startCrop }
+const MIN_CROP_DISPLAY_PX = 60;
+
 const el = (id) => document.getElementById(id);
 
 async function init() {
@@ -57,6 +66,10 @@ function wireEvents() {
   el("retakeBtn").addEventListener("click", showCaptureState);
   el("scanAnotherBtn").addEventListener("click", showCaptureState);
   el("analyseBtn").addEventListener("click", submitAnalysis);
+  el("resetCropBtn").addEventListener("click", resetCrop);
+  el("zoomCenterBtn").addEventListener("click", zoomToCenter);
+
+  initCropper();
 
   const dz = el("dropzone");
   dz.addEventListener("dragover", (e) => {
@@ -96,6 +109,137 @@ function onFilePicked(file) {
   el("emptyState").hidden = true;
   el("previewState").hidden = false;
   el("analyseBtn").disabled = false;
+  // resetCrop() itself runs once the image has actually loaded and has
+  // real dimensions to measure -- wired via cropImgEl.onload in initCropper.
+}
+
+// ---------------------------------------------------------------- //
+// Crop/zoom tool
+//
+// The native camera app (opened via <input capture="environment">) is
+// outside the page's control -- there's no way to overlay a live framing
+// guide on it or auto-zoom it from JS. This is the practical equivalent:
+// let the user tighten the frame around the insect AFTER capture, so a
+// small/distant subject can still be zoomed in on before the image is
+// sent for detection.
+// ---------------------------------------------------------------- //
+function initCropper() {
+  cropContainerEl = el("cropContainer");
+  cropImgEl = el("previewImg");
+  cropBoxEl = el("cropBox");
+
+  cropImgEl.addEventListener("load", resetCrop);
+
+  cropBoxEl.addEventListener("pointerdown", (e) => {
+    if (e.target === cropBoxEl) startDrag(e, "move");
+  });
+  cropBoxEl.querySelectorAll(".crop-handle").forEach((handle) => {
+    handle.addEventListener("pointerdown", (e) => startDrag(e, handle.dataset.handle));
+  });
+  document.addEventListener("pointermove", onPointerMove);
+  document.addEventListener("pointerup", () => { activeDrag = null; });
+}
+
+/** Default state: the full photo, unmodified. A user who never touches
+ * the crop tool gets exactly the same image sent as before this feature
+ * existed -- cropping is an available aid, not a silent default that
+ * could clip a subject that wasn't centred. */
+function resetCrop() {
+  const w = cropImgEl.clientWidth;
+  const h = cropImgEl.clientHeight;
+  if (!w || !h) return; // not laid out yet
+  crop = { x: 0, y: 0, w, h };
+  renderCropBox();
+}
+
+/** One-tap suggestion for "the insect is small in the frame": crop to a
+ * centred 70% box. Only runs when the user asks for it (see wireEvents),
+ * since assuming the subject is centred by default would be wrong often
+ * enough to do more harm than good. */
+function zoomToCenter() {
+  const w = cropImgEl.clientWidth;
+  const h = cropImgEl.clientHeight;
+  if (!w || !h) return;
+  const boxW = w * 0.7;
+  const boxH = h * 0.7;
+  crop = { x: (w - boxW) / 2, y: (h - boxH) / 2, w: boxW, h: boxH };
+  renderCropBox();
+}
+
+function renderCropBox() {
+  cropBoxEl.style.left = crop.x + "px";
+  cropBoxEl.style.top = crop.y + "px";
+  cropBoxEl.style.width = crop.w + "px";
+  cropBoxEl.style.height = crop.h + "px";
+}
+
+function clampCrop() {
+  const maxW = cropImgEl.clientWidth;
+  const maxH = cropImgEl.clientHeight;
+  crop.w = Math.max(MIN_CROP_DISPLAY_PX, Math.min(crop.w, maxW));
+  crop.h = Math.max(MIN_CROP_DISPLAY_PX, Math.min(crop.h, maxH));
+  crop.x = Math.max(0, Math.min(crop.x, maxW - crop.w));
+  crop.y = Math.max(0, Math.min(crop.y, maxH - crop.h));
+}
+
+function startDrag(e, type) {
+  e.preventDefault();
+  activeDrag = { type, startX: e.clientX, startY: e.clientY, startCrop: { ...crop } };
+  e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId);
+}
+
+function onPointerMove(e) {
+  if (!activeDrag || !crop) return;
+  const dx = e.clientX - activeDrag.startX;
+  const dy = e.clientY - activeDrag.startY;
+  const s = activeDrag.startCrop;
+
+  if (activeDrag.type === "move") {
+    crop.x = s.x + dx;
+    crop.y = s.y + dy;
+    crop.w = s.w;
+    crop.h = s.h;
+  } else {
+    let { x, y, w, h } = s;
+    if (activeDrag.type.includes("e")) w = s.w + dx;
+    if (activeDrag.type.includes("s")) h = s.h + dy;
+    if (activeDrag.type.includes("w")) { x = s.x + dx; w = s.w - dx; }
+    if (activeDrag.type.includes("n")) { y = s.y + dy; h = s.h - dy; }
+    crop = { x, y, w, h };
+  }
+  clampCrop();
+  renderCropBox();
+}
+
+/** Maps the on-screen crop box (display pixels) to the photo's actual
+ * pixel coordinates -- the preview is often shown scaled down. */
+function getCropRectNatural() {
+  const scaleX = cropImgEl.naturalWidth / cropImgEl.clientWidth;
+  const scaleY = cropImgEl.naturalHeight / cropImgEl.clientHeight;
+  return {
+    x: crop.x * scaleX,
+    y: crop.y * scaleY,
+    w: crop.w * scaleX,
+    h: crop.h * scaleY,
+  };
+}
+
+/** Cuts the selected region out of the original photo via canvas and
+ * returns it as a JPEG Blob. Falls back to null on any failure so the
+ * caller can just send the original, uncropped file instead. */
+async function cropToBlob() {
+  if (!crop) return null;
+  try {
+    const rect = getCropRectNatural();
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(rect.w));
+    canvas.height = Math.max(1, Math.round(rect.h));
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(cropImgEl, rect.x, rect.y, rect.w, rect.h, 0, 0, canvas.width, canvas.height);
+    return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+  } catch (e) {
+    return null;
+  }
 }
 
 function resetCapture() {
@@ -135,8 +279,17 @@ async function submitAnalysis() {
   el("analyseSpinner").hidden = false;
   el("submitError").hidden = true;
 
+  // Send the cropped region if the crop tool produced one (i.e. the user
+  // zoomed in, or even just the default 70% box); fall back to the
+  // original file if cropping failed for any reason -- better to analyse
+  // the whole photo than to fail the scan outright.
+  const croppedBlob = await cropToBlob();
+  const imageToSend = croppedBlob
+    ? new File([croppedBlob], "cropped.jpg", { type: "image/jpeg" })
+    : selectedFile;
+
   const form = new FormData();
-  form.append("image", selectedFile);
+  form.append("image", imageToSend);
   form.append("growth_stage", el("growthStage").value);
   form.append("observed_count", el("observedCount").value || "1");
 
@@ -306,7 +459,12 @@ function renderCascade(data) {
     });
   }
 
-  data.detections.forEach((d) => list.appendChild(detectionRow(d.taxon, d.confidence, d.flagged, false)));
+  data.detections.forEach((d) => {
+    const runnerUp = d.runner_up_taxon
+      ? { taxon: d.runner_up_taxon, confidence: d.runner_up_confidence }
+      : null;
+    list.appendChild(detectionRow(d.taxon, d.confidence, d.flagged, false, runnerUp));
+  });
 }
 
 function renderClassifierOnly(data) {
@@ -315,12 +473,14 @@ function renderClassifierOnly(data) {
   data.top_predictions.forEach((p, i) => {
     // top_predictions[0] is always the one actually fed into the decision
     // tree (see app.py) -- marking it avoids the user wondering which of
-    // the three numbers the advisory above is actually about.
-    list.appendChild(detectionRow(p.taxon, p.confidence, p.confidence < 0.75, i === 0));
+    // the three numbers the advisory above is actually about. All three
+    // are already listed as separate rows here, so no extra runner-up
+    // note is needed the way cascade mode's single-row-per-box needs one.
+    list.appendChild(detectionRow(p.taxon, p.confidence, p.confidence < 0.75, i === 0, null));
   });
 }
 
-function detectionRow(taxon, confidence, flagged, isBest) {
+function detectionRow(taxon, confidence, flagged, isBest, runnerUp) {
   const row = document.createElement("div");
   row.className = "detection-row";
 
@@ -369,6 +529,17 @@ function detectionRow(taxon, confidence, flagged, isBest) {
   label.className = "confidence-label";
   label.innerHTML = `<span>Confidence</span><span>${pct}%</span>`;
   row.appendChild(label);
+
+  // Surface the second-best guess when it's not negligible -- e.g. for a
+  // weevil/beetle-type mix-up, this shows the user both candidates the
+  // model was actually choosing between, instead of one label that reads
+  // as more certain than it is.
+  if (runnerUp && runnerUp.confidence >= 0.10) {
+    const alt = document.createElement("div");
+    alt.className = "runner-up-note";
+    alt.textContent = `Could also be ${speciesLabel(runnerUp.taxon)} (${Math.round(runnerUp.confidence * 100)}%)`;
+    row.appendChild(alt);
+  }
 
   return row;
 }
