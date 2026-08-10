@@ -93,15 +93,24 @@ function onFilePicked(file) {
   }
 
   selectedFile = file;
-  el("previewImg").src = URL.createObjectURL(file);
-  el("emptyState").hidden = true;
-  el("previewState").hidden = false;
-  el("analyseBtn").disabled = false;
-  // resetCrop() itself runs once the image has actually loaded and has
-  // real dimensions to measure -- wired via cropImgEl "load"/"error" in
-  // initCropper(). Until then the crop box stays hidden (see
-  // initCropper) rather than showing at whatever stale/zero position it
-  // last had -- its darkening effect covers the full page otherwise.
+
+  // Read as a data URL rather than URL.createObjectURL(): sidesteps blob
+  // URL lifecycle/revocation edge cases entirely, and -- more importantly
+  // -- lets the preview stay hidden until we KNOW there's something real
+  // to show. Nothing here reveals previewState; that only happens inside
+  // resetCrop(), triggered by the <img>'s own "load" event once the
+  // browser has actually decoded the image successfully. That way a
+  // format the browser can't render (or a slow decode) never gets a
+  // chance to show a broken-image icon -- the empty state just stays put
+  // until there's a confirmed result, success or failure.
+  const reader = new FileReader();
+  reader.onload = () => {
+    el("previewImg").src = reader.result;
+  };
+  reader.onerror = () => {
+    showFileError("Couldn't read that file. Please try a different photo.");
+  };
+  reader.readAsDataURL(file);
 }
 
 // ---------------------------------------------------------------- //
@@ -145,6 +154,16 @@ function initCropper() {
  * existed -- cropping is an available aid, not a silent default that
  * could clip a subject that wasn't centred. */
 function resetCrop() {
+  // Reveal the preview HERE, not in onFilePicked -- this only runs once
+  // the <img> has genuinely finished decoding (it's wired to the "load"
+  // event), so the container is never shown with nothing valid to display.
+  // Unhiding must happen before measuring clientWidth/clientHeight below:
+  // a hidden (display:none) element always measures 0x0 regardless of the
+  // image's real size.
+  el("emptyState").hidden = true;
+  el("previewState").hidden = false;
+  el("analyseBtn").disabled = false;
+
   const w = cropImgEl.clientWidth;
   const h = cropImgEl.clientHeight;
   if (!w || !h) return; // not laid out yet
