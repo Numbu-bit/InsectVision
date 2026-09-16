@@ -102,6 +102,23 @@
       "is_specimen": false
     }
   },
-  "classifier_macro_f1": null,
-  "detector_map50": 0.9636
+  "classifier_macro_f1": 0.9411529969910395,
+  "detector_map50": 0.9636,
+  "classifier_specimen_macro_f1": 0.9369377853077858,
+  "classifier_per_class_f1": {
+    "ants": 0.943089430894309,
+    "bees": 0.9915966386554622,
+    "beetle": 0.875,
+    "catterpillar": 0.8524590163934426,
+    "earthworms": 0.9166666666666666,
+    "earwig": 0.9152542372881356,
+    "grasshopper": 0.9491525423728814,
+    "moth": 0.96,
+    "other": 0.9917355371900827,
+    "slug": 0.8983050847457628,
+    "snail": 0.9836065573770492,
+    "wasp": 0.9747899159663865,
+    "weevil": 0.9833333333333333
+  },
+  "classifier_reject_recall": 1.0
 }
