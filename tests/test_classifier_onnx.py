@@ -3,7 +3,7 @@ import pytest
 from PIL import Image
 
 from src.classifier_onnx import IMAGENET_MEAN, IMAGENET_STD, ClassifierOnnx
-from tests.conftest import LEGACY_CLASSIFIER, requires_legacy_classifier
+from tests.conftest import CLASSIFIER, requires_classifier
 
 torchvision = pytest.importorskip("torchvision", reason="preprocessing parity test needs torchvision")
 from torchvision import transforms  # noqa: E402
@@ -44,20 +44,35 @@ def test_palette_image_is_converted_before_resize():
     assert np.array_equal(_preprocess_only(pal), _preprocess_only(pal.convert("RGB")))
 
 
-@requires_legacy_classifier()
-class TestWithLegacyModel:
-    def test_refuses_class_count_mismatch(self, species_cfg):
+@requires_classifier()
+class TestWithTrainedModel:
+    def test_refuses_class_count_mismatch(self, specimen_class_names):
+        # 12 insect names against the 13-output file -- the exact mistake of
+        # dropping in a new model without its species.json.
         with pytest.raises(ValueError, match="out of sync"):
-            ClassifierOnnx(str(LEGACY_CLASSIFIER), species_cfg["class_names"])  # 13 names vs 12 outputs
+            ClassifierOnnx(str(CLASSIFIER), specimen_class_names)
 
-    def test_refuses_duplicate_class_names(self, legacy_class_names):
+    def test_refuses_duplicate_class_names(self, species_cfg):
+        names = species_cfg["class_names"]
         with pytest.raises(ValueError, match="duplicates"):
-            ClassifierOnnx(str(LEGACY_CLASSIFIER), legacy_class_names[:-1] + [legacy_class_names[0]])
+            ClassifierOnnx(str(CLASSIFIER), names[:-1] + [names[0]])
 
-    def test_probabilities_sum_to_one_and_top_k_bounded(self, legacy_class_names):
-        clf = ClassifierOnnx(str(LEGACY_CLASSIFIER), legacy_class_names)
+    def test_probabilities_sum_to_one_and_top_k_bounded(self, species_cfg):
+        names = species_cfg["class_names"]
+        clf = ClassifierOnnx(str(CLASSIFIER), names)
         img = Image.fromarray(np.random.default_rng(3).integers(0, 255, (300, 300, 3), dtype=np.uint8))
         probs = clf.probabilities(img)
-        assert probs.shape == (len(legacy_class_names),) and abs(probs.sum() - 1) < 1e-5
-        assert len(clf.classify(img, top_k=99)) == len(legacy_class_names)
+        assert probs.shape == (len(names),) and abs(probs.sum() - 1) < 1e-5
+        assert len(clf.classify(img, top_k=99)) == len(names)
         assert len(clf.classify(img, top_k=0)) == 1
+
+    def test_non_insect_images_resolve_to_reject_class(self, species_cfg):
+        """The reason the 13th class exists: synthetic non-insect inputs must
+        land on 'other', not on the nearest insect (the old 'beetle 56%' bug)."""
+        clf = ClassifierOnnx(str(CLASSIFIER), species_cfg["class_names"])
+        rng = np.random.default_rng(0)
+        grey = Image.new("RGB", (400, 400), (128, 128, 128))
+        noise = Image.fromarray(rng.integers(0, 255, (400, 400, 3), dtype=np.uint8))
+        for img in (grey, noise):
+            top = clf.classify(img, top_k=1)[0]
+            assert top.taxon == species_cfg["reject_class"], f"got {top.taxon} {top.confidence:.2f}"
