@@ -5,6 +5,29 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // must match app.py's config.MAX_UPL
 let health = null;
 let selectedFile = null;
 
+// Fallbacks only for when /api/v1/health is unreachable -- the live values
+// come from the server so the UI can never disagree with the decision the
+// backend actually made (decision_tree.CONFIDENCE_THRESHOLD, species.json
+// reject_class).
+const DEFAULT_CONFIDENCE_THRESHOLD = 0.75;
+function confidenceThreshold() {
+  return (health && typeof health.confidence_threshold === "number")
+    ? health.confidence_threshold : DEFAULT_CONFIDENCE_THRESHOLD;
+}
+/** The classifier's "not an insect I recognise" class, or null for a legacy
+ * closed-set model. */
+function rejectClass() {
+  return (health && health.reject_class) || null;
+}
+/** False for the reject class (and anything species.json marks
+ * is_specimen:false) -- such a prediction is a statement that there is NO
+ * recognisable insect, not an identification of one. */
+function isSpecimen(taxon) {
+  if (taxon === rejectClass()) return false;
+  const info = health && health.species_info && health.species_info[taxon];
+  return !(info && info.is_specimen === false);
+}
+
 // The exact bytes last sent to /api/v1/analyse (post-crop), kept only so a
 // successful cascade result can draw detection boxes over precisely what
 // the server saw -- box coordinates from the API are in that image's pixel
@@ -27,7 +50,8 @@ async function init() {
     const res = await fetch("/api/v1/health");
     health = await res.json();
   } catch (e) {
-    health = { mode: "not_configured", class_names: [], taxon_status: {}, species_info: {} };
+    health = { mode: "not_configured", class_names: [], taxon_status: {}, species_info: {},
+               reject_class: null, confidence_threshold: DEFAULT_CONFIDENCE_THRESHOLD };
   }
 
   // Shown regardless of mode -- the class list comes from species.json,
@@ -36,7 +60,21 @@ async function init() {
   if (health.class_names && health.class_names.length > 0) {
     renderSupportedSpecies();
     el("supportedCard").hidden = false;
+    el("supportedCount").textContent = `${health.class_names.filter(isSpecimen).length} species`;
   }
+  // Model badge: class count and the recorded validation macro-F1, when
+  // training has written one -- so a user can see which model answered.
+  if (typeof health.classifier_macro_f1 === "number") {
+    const b = el("modelBadge");
+    b.textContent = `${health.class_names.filter(isSpecimen).length} species · F1 ${health.classifier_macro_f1.toFixed(2)}`;
+    b.hidden = false;
+  }
+  setStep(1);
+  // Both threshold mentions in the static copy read the live value too.
+  document.querySelectorAll("[data-threshold-pct]").forEach((n) => {
+    n.textContent = Math.round(confidenceThreshold() * 100) + "%";
+  });
+  el("rejectNote").hidden = !rejectClass();
 
   if (health.mode === "not_configured") {
     el("captureCard").hidden = true;
@@ -54,6 +92,7 @@ async function init() {
 function wireEvents() {
   el("takePhotoBtn").addEventListener("click", () => el("cameraInput").click());
   el("chooseFileBtn").addEventListener("click", () => el("galleryInput").click());
+  initWebcam();
   el("cameraInput").addEventListener("change", (e) => onFilePicked(e.target.files[0]));
   el("galleryInput").addEventListener("change", (e) => onFilePicked(e.target.files[0]));
   el("replaceBtn").addEventListener("click", resetCapture);
@@ -77,6 +116,149 @@ function wireEvents() {
     const file = e.dataTransfer.files && e.dataTransfer.files[0];
     if (file) onFilePicked(file);
   });
+}
+
+/** 1 = choose photo, 2 = ready to analyse / analysing, 3 = verdict shown. */
+function setStep(n) {
+  document.querySelectorAll(".step").forEach((li) => {
+    const k = Number(li.dataset.step);
+    li.classList.toggle("is-active", k === n);
+    li.classList.toggle("is-done", k < n);
+  });
+}
+
+// ---------------------------------------------------------------- //
+// Webcam (desktop and laptops -- phones get the native camera via the
+// capture="environment" input, which is a better experience there)
+//
+// getUserMedia needs a secure context: https:// in production (Render is),
+// or localhost during development. On plain http:// over a LAN the browser
+// hides the API entirely, and the button stays hidden with it.
+// ---------------------------------------------------------------- //
+let webcamStream = null;
+let webcamFacing = "environment"; // rear camera first on devices that have one
+
+function webcamSupported() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+
+function initWebcam() {
+  if (!webcamSupported()) return;
+  el("webcamBtn").hidden = false;
+  el("webcamBtn").addEventListener("click", openWebcam);
+  el("webcamCancelBtn").addEventListener("click", closeWebcam);
+  el("webcamCaptureBtn").addEventListener("click", captureWebcamFrame);
+  el("webcamSwitchBtn").addEventListener("click", () => {
+    webcamFacing = webcamFacing === "environment" ? "user" : "environment";
+    startWebcamStream();
+  });
+  el("webcamModal").addEventListener("click", (e) => {
+    if (e.target === el("webcamModal")) closeWebcam(); // click on the backdrop
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !el("webcamModal").hidden) closeWebcam();
+  });
+  // Never leave a camera running in the background when the tab is hidden.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && webcamStream) closeWebcam();
+  });
+}
+
+async function openWebcam() {
+  hideFileError();
+  el("webcamError").hidden = true;
+  el("webcamModal").hidden = false;
+  el("webcamCaptureBtn").disabled = true;
+  await startWebcamStream();
+}
+
+async function startWebcamStream() {
+  stopWebcamTracks();
+  const video = el("webcamVideo");
+  try {
+    webcamStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      // "ideal", not "exact": ask for a high-resolution frame (the model
+      // wants detail) but accept whatever the camera can do rather than
+      // failing outright on a 720p laptop webcam.
+      video: { facingMode: webcamFacing, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    });
+    video.srcObject = webcamStream;
+    try { await video.play(); } catch (e) { /* autoplay attribute handles it */ }
+    el("webcamCaptureBtn").disabled = false;
+    el("webcamError").hidden = true;
+    // Offer the flip button only when there is more than one camera.
+    try {
+      const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+      el("webcamSwitchBtn").hidden = cams.length < 2;
+    } catch (e) {
+      el("webcamSwitchBtn").hidden = true;
+    }
+  } catch (err) {
+    showWebcamError(friendlyWebcamError(err));
+  }
+}
+
+function friendlyWebcamError(err) {
+  const name = err && err.name;
+  if (!window.isSecureContext) {
+    return "The webcam only works over https:// or on localhost -- your browser blocks camera access on plain http.";
+  }
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Camera permission was denied. Allow camera access for this site in your browser's address bar, then try again.";
+  }
+  if (name === "NotFoundError" || name === "OverconstrainedError" || name === "DevicesNotFoundError") {
+    return "No camera was found on this device. Use \"Choose File\" instead.";
+  }
+  if (name === "NotReadableError" || name === "AbortError") {
+    return "The camera is busy or unavailable -- another app may be using it. Close it and try again.";
+  }
+  return "Couldn't start the webcam. Try again, or use \"Choose File\".";
+}
+
+function showWebcamError(msg) {
+  const e = el("webcamError");
+  e.textContent = msg;
+  e.hidden = false;
+  el("webcamCaptureBtn").disabled = true;
+}
+
+function stopWebcamTracks() {
+  if (webcamStream) {
+    webcamStream.getTracks().forEach((t) => t.stop());
+    webcamStream = null;
+  }
+  const video = el("webcamVideo");
+  if (video) video.srcObject = null;
+}
+
+function closeWebcam() {
+  stopWebcamTracks();
+  el("webcamModal").hidden = true;
+}
+
+/** Grabs the current video frame at the camera's native resolution and
+ * hands it to the same onFilePicked() path a chosen file takes -- so the
+ * crop tool, size check and upload behave identically for webcam shots. */
+function captureWebcamFrame() {
+  const video = el("webcamVideo");
+  const w = video.videoWidth, h = video.videoHeight;
+  if (!w || !h) {
+    showWebcamError("The camera hasn't delivered a frame yet -- give it a second and try again.");
+    return;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext("2d").drawImage(video, 0, 0, w, h);
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      showWebcamError("Couldn't capture the frame. Try again.");
+      return;
+    }
+    closeWebcam();
+    onFilePicked(new File([blob], `webcam-${Date.now()}.jpg`, { type: "image/jpeg" }));
+  }, "image/jpeg", 0.92);
 }
 
 // ---------------------------------------------------------------- //
@@ -169,6 +351,7 @@ function resetCrop() {
   el("emptyState").hidden = true;
   el("previewState").hidden = false;
   el("analyseBtn").disabled = false;
+  setStep(2);
 
   const w = cropImgEl.clientWidth;
   const h = cropImgEl.clientHeight;
@@ -296,6 +479,7 @@ function resetCapture() {
   el("previewState").hidden = true;
   el("analyseBtn").disabled = true;
   hideFileError();
+  setStep(1);
 }
 
 function showFileError(msg) {
@@ -397,8 +581,10 @@ function speciesLabel(taxon) {
   const info = health.species_info && health.species_info[taxon];
   return (info && info.common_name) || taxon.replace(/_/g, " ");
 }
+// Defaults to "neutral", not "pest": a taxon missing from taxon_status is a
+// config gap, and painting it red would invent a risk judgement nobody made.
 function speciesStatus(taxon) {
-  return (health.taxon_status && health.taxon_status[taxon]) || "pest";
+  return (health.taxon_status && health.taxon_status[taxon]) || "neutral";
 }
 
 // ---------------------------------------------------------------- //
@@ -407,6 +593,7 @@ function speciesStatus(taxon) {
 function renderSupportedSpecies() {
   const groups = { pest: [], beneficial: [], neutral: [] };
   health.class_names.forEach((taxon) => {
+    if (!isSpecimen(taxon)) return; // "other" is a model output, not a species the app identifies
     const status = speciesStatus(taxon);
     (groups[status] || groups.neutral).push(taxon);
   });
@@ -468,8 +655,10 @@ function renderResult(data) {
 
   el("rejectedView").hidden = true;
   el("successView").hidden = false;
+  setStep(3);
 
   el("latencyMs").textContent = `${Math.round(data.latency_ms)} ms`;
+  renderVerdictBanner(data);
 
   if (data.mode === "cascade") {
     el("cascadeResults").hidden = false;
@@ -482,6 +671,62 @@ function renderResult(data) {
   }
 
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+/** The one-line answer above the details. Three states only, matching
+ * decision_tree.Verdict: confirmed (green), uncertain (amber), none (grey). */
+function renderVerdictBanner(data) {
+  const banner = el("verdictBanner");
+  banner.className = "verdict-banner";
+  banner.innerHTML = "";
+  let kind, title, sub;
+
+  if (data.mode === "cascade") {
+    const dets = data.detections || [];
+    const confirmed = dets.filter((d) => d.verdict === "confirmed" || (!d.verdict && !d.flagged));
+    const uncertain = dets.filter((d) => d.verdict === "uncertain" || (!d.verdict && d.flagged && d.is_specimen !== false));
+    const rejected = dets.filter((d) => d.is_specimen === false);
+    if (dets.length === 0) {
+      kind = "none"; title = "No insects detected"; sub = "Nothing in the photo looked like an insect to the detector. Try cropping closer.";
+    } else if (confirmed.length > 0) {
+      const names = [...new Set(confirmed.map((d) => speciesLabel(d.taxon)))];
+      kind = "confirmed";
+      title = confirmed.length === 1 ? `Identified: ${names[0]}` : `${confirmed.length} insects identified`;
+      sub = [uncertain.length ? `${uncertain.length} more need${uncertain.length === 1 ? "s" : ""} review` : null,
+             rejected.length ? `${rejected.length} region${rejected.length === 1 ? "" : "s"} not an insect` : null]
+            .filter(Boolean).join(" · ");
+    } else if (uncertain.length > 0) {
+      kind = "uncertain";
+      title = `Possibly ${speciesLabel(uncertain[0].taxon)} -- needs review`;
+      sub = `Below the ${Math.round(confidenceThreshold() * 100)}% confidence needed to confirm.`;
+    } else {
+      kind = "none"; title = "No known insect recognised"; sub = "The regions found don't match any species this app knows.";
+    }
+  } else {
+    const preds = data.top_predictions || [];
+    const best = preds[0];
+    if (!best || data.verdict === "no_specimen" || best.is_specimen === false) {
+      kind = "none"; title = "No known insect recognised"; sub = "This photo doesn't look like any species this app is trained on.";
+    } else if (data.verdict === "confirmed" || best.confidence >= confidenceThreshold()) {
+      kind = "confirmed"; title = `Identified: ${speciesLabel(best.taxon)}`; sub = `${Math.round(best.confidence * 100)}% confidence · ${speciesStatus(best.taxon)}`;
+    } else {
+      kind = "uncertain"; title = `Possibly ${speciesLabel(best.taxon)} -- needs review`; sub = `${Math.round(best.confidence * 100)}% is below the ${Math.round(confidenceThreshold() * 100)}% needed to confirm.`;
+    }
+  }
+
+  const icon = document.createElement("span");
+  icon.className = "verdict-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = kind === "confirmed" ? "✅" : kind === "uncertain" ? "🤔" : "🔍";
+  const text = document.createElement("span");
+  text.className = "verdict-text";
+  const t = document.createElement("span"); t.textContent = title;
+  text.appendChild(t);
+  if (sub) { const sEl = document.createElement("span"); sEl.className = "verdict-sub"; sEl.textContent = sub; text.appendChild(sEl); }
+  banner.appendChild(icon);
+  banner.appendChild(text);
+  banner.classList.add(kind);
+  banner.hidden = false;
 }
 
 function renderCascade(data) {
@@ -502,9 +747,23 @@ function renderCascade(data) {
 
   const counts = {};
   data.detections.forEach((d) => {
-    if (d.flagged) return; // an unconfirmed guess must never be counted as a confirmed identification
+    // Only a CONFIRMED specimen is ever counted. `flagged` is true for both
+    // an uncertain insect and a no_specimen region, and is_specimen is
+    // checked explicitly too so a server that only sent the older field
+    // set still can't get a "Not an insect" chip into the tally.
+    if (d.flagged || d.is_specimen === false) return;
     counts[d.taxon] = (counts[d.taxon] || 0) + 1;
   });
+
+  const noSpecimenCount = data.detections.filter((d) => d.is_specimen === false).length;
+  const allNoSpecimen = noSpecimenCount === data.detections.length;
+
+  if (allNoSpecimen) {
+    // Every region the detector proposed was rejected by the classifier:
+    // the honest headline is "nothing recognised", not a list of guesses.
+    list.appendChild(noSpecimenBlock(bestClosestSpecies(data.detections)));
+    return;
+  }
 
   if (Object.keys(counts).length === 0) {
     const chip = document.createElement("span");
@@ -521,6 +780,10 @@ function renderCascade(data) {
   }
 
   data.detections.forEach((d) => {
+    if (d.is_specimen === false) {
+      list.appendChild(noSpecimenRow(d));
+      return;
+    }
     const runnerUp = d.runner_up_taxon
       ? { taxon: d.runner_up_taxon, confidence: d.runner_up_confidence }
       : null;
@@ -528,12 +791,79 @@ function renderCascade(data) {
   });
 }
 
+/** Across several no_specimen regions, the single most plausible insect
+ * candidate the model considered (or null if none clears 10%). */
+function bestClosestSpecies(detections) {
+  let best = null;
+  detections.forEach((d) => {
+    if (d.is_specimen !== false || !d.runner_up_taxon || !isSpecimen(d.runner_up_taxon)) return;
+    if (d.runner_up_confidence >= 0.10 && (!best || d.runner_up_confidence > best.confidence)) {
+      best = { taxon: d.runner_up_taxon, confidence: d.runner_up_confidence };
+    }
+  });
+  return best;
+}
+
+/** Neutral "nothing recognised" state. Deliberately has no species name in
+ * the heading, no pest/beneficial colour and no confidence bar: the
+ * classifier's confidence in "other" is confidence that there's NO known
+ * insect here, and drawing it as a green bar would read as the opposite. */
+function noSpecimenBlock(closest) {
+  const box = document.createElement("div");
+  box.className = "no-specimen";
+  const icon = document.createElement("div");
+  icon.className = "no-specimen-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = "🔍";
+  const h = document.createElement("h3");
+  h.textContent = "No known insect recognised";
+  const p = document.createElement("p");
+  p.textContent = "This photo doesn't look like any of the species this app is trained on. " +
+    "If there is an insect in it, try getting closer or cropping tighter around it.";
+  box.appendChild(icon);
+  box.appendChild(h);
+  box.appendChild(p);
+  if (closest) {
+    const alt = document.createElement("p");
+    alt.className = "runner-up-note";
+    alt.textContent = `Closest species the model considered: ${speciesLabel(closest.taxon)} ` +
+      `(${Math.round(closest.confidence * 100)}%) -- far too low to be an identification.`;
+    box.appendChild(alt);
+  }
+  return box;
+}
+
+/** One detected region that the classifier rejected, listed alongside real
+ * detections when a photo has both. */
+function noSpecimenRow(d) {
+  const row = document.createElement("div");
+  row.className = "detection-row no-specimen-row";
+  const top = document.createElement("div");
+  top.className = "detection-row-top";
+  const name = document.createElement("span");
+  name.innerHTML = `<span class="detection-name">Not an insect</span>`;
+  const tag = document.createElement("span");
+  tag.className = "status-tag none";
+  tag.textContent = "not recognised";
+  name.appendChild(tag);
+  top.appendChild(name);
+  row.appendChild(top);
+  const note = document.createElement("div");
+  note.className = "runner-up-note";
+  const closest = (d.runner_up_taxon && isSpecimen(d.runner_up_taxon) && d.runner_up_confidence >= 0.10)
+    ? ` Closest species considered: ${speciesLabel(d.runner_up_taxon)} (${Math.round(d.runner_up_confidence * 100)}%).`
+    : "";
+  note.textContent = "This region doesn't match any species the app knows." + closest;
+  row.appendChild(note);
+  return row;
+}
+
 // Matches the status-tag / tally-chip colour language elsewhere in the UI
 // (see style.css --red-700/--green-700/--grey-700), plus a distinct blue
 // for anything flagged below the 75% confirmation threshold (matching
 // .flagged-tag) so an unconfirmed guess never LOOKS as certain as a
 // confirmed one when drawn on the photo itself.
-const BOX_COLORS = { pest: "#b71c1c", beneficial: "#2e7d32", neutral: "#4a4a4a", flagged: "#0d47a1" };
+const BOX_COLORS = { pest: "#b71c1c", beneficial: "#2e7d32", neutral: "#4a4a4a", flagged: "#0d47a1", none: "#757575" };
 
 /** Draws the exact image the server analysed, with a box and label over
  * each detection -- since the dataset this model trained on (Roboflow) is
@@ -566,13 +896,21 @@ function drawDetections(detections) {
 
     detections.forEach((d) => {
       const [x1, y1, x2, y2] = d.box;
-      const color = d.flagged ? BOX_COLORS.flagged : (BOX_COLORS[speciesStatus(d.taxon)] || BOX_COLORS.pest);
+      const rejected = d.is_specimen === false;
+      const color = rejected ? BOX_COLORS.none
+        : d.flagged ? BOX_COLORS.flagged
+        : (BOX_COLORS[speciesStatus(d.taxon)] || BOX_COLORS.neutral);
 
       ctx.strokeStyle = color;
       ctx.lineWidth = lineWidth;
+      ctx.setLineDash(rejected ? [lineWidth * 3, lineWidth * 2] : []);
       ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      ctx.setLineDash([]);
 
-      const label = `${speciesLabel(d.taxon)} ${Math.round(d.confidence * 100)}%`;
+      // A rejected region shows no percentage: the number would be the
+      // model's confidence that it is NOT an insect, which reads backwards
+      // next to the real detections' confidence-in-a-species numbers.
+      const label = rejected ? "Not an insect" : `${speciesLabel(d.taxon)} ${Math.round(d.confidence * 100)}%`;
       const pad = Math.round(fontSize * 0.3);
       const textW = ctx.measureText(label).width;
       const labelH = fontSize + pad * 2;
@@ -597,13 +935,38 @@ function drawDetections(detections) {
 
 function renderClassifierOnly(data) {
   const list = el("topPredictionsList");
+  const heading = el("topMatchesHeading");
   list.innerHTML = "";
-  data.top_predictions.forEach((p, i) => {
-    // top_predictions[0] is the model's best guess -- marked so it's clear
-    // which of the three numbers is the primary answer. All three are
-    // already listed as separate rows here, so no extra runner-up note is
-    // needed the way cascade mode's single-row-per-box needs one.
-    list.appendChild(detectionRow(p.taxon, p.confidence, p.confidence < 0.75, i === 0, null));
+
+  const preds = data.top_predictions;
+  if (data.verdict === "no_specimen" || (preds.length && preds[0].is_specimen === false)) {
+    // The whole image was rejected: no species card at all, just the
+    // neutral state plus (maybe) the closest insect for context.
+    heading.hidden = true;
+    const closest = preds.find((p) => p.is_specimen !== false && p.confidence >= 0.10) || null;
+    list.appendChild(noSpecimenBlock(closest));
+    return;
+  }
+
+  heading.hidden = false;
+  const thr = confidenceThreshold();
+  let bestShown = false;
+  preds.forEach((p) => {
+    if (p.is_specimen === false) {
+      // "other" appearing as a runner-up is useful context ("the model
+      // partly doubts this is an insect") but it's not a species row.
+      if (p.confidence >= 0.10) {
+        const note = document.createElement("div");
+        note.className = "runner-up-note";
+        note.textContent = `The model also considered that this may not be an insect at all (${Math.round(p.confidence * 100)}%).`;
+        list.appendChild(note);
+      }
+      return;
+    }
+    // The first specimen row is the model's best guess -- marked so it's
+    // clear which of the numbers is the primary answer.
+    list.appendChild(detectionRow(p.taxon, p.confidence, p.confidence < thr, !bestShown, null));
+    bestShown = true;
   });
 }
 
@@ -639,15 +1002,17 @@ function detectionRow(taxon, confidence, flagged, isBest, runnerUp) {
   top.appendChild(nameSpan);
   row.appendChild(top);
 
+  const thr = confidenceThreshold();
   const pct = Math.round(confidence * 100);
   const barWrap = document.createElement("div");
   barWrap.className = "confidence-bar-wrap";
   const fill = document.createElement("div");
-  fill.className = "confidence-bar-fill" + (confidence < 0.75 ? " below-threshold" : "");
+  fill.className = "confidence-bar-fill" + (confidence < thr ? " below-threshold" : "");
   fill.style.width = pct + "%";
   const tick = document.createElement("div");
   tick.className = "confidence-threshold-tick";
-  tick.title = "75% confirmation threshold";
+  tick.style.left = Math.round(thr * 100) + "%";
+  tick.title = `${Math.round(thr * 100)}% confirmation threshold`;
   barWrap.appendChild(fill);
   barWrap.appendChild(tick);
   row.appendChild(barWrap);
@@ -664,7 +1029,9 @@ function detectionRow(taxon, confidence, flagged, isBest, runnerUp) {
   if (runnerUp && runnerUp.confidence >= 0.10) {
     const alt = document.createElement("div");
     alt.className = "runner-up-note";
-    alt.textContent = `Could also be ${speciesLabel(runnerUp.taxon)} (${Math.round(runnerUp.confidence * 100)}%)`;
+    alt.textContent = isSpecimen(runnerUp.taxon)
+      ? `Could also be ${speciesLabel(runnerUp.taxon)} (${Math.round(runnerUp.confidence * 100)}%)`
+      : `The model also considered that this may not be an insect at all (${Math.round(runnerUp.confidence * 100)}%).`;
     row.appendChild(alt);
   }
 

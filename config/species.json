@@ -1,8 +1,10 @@
 {
   "detector_onnx": "models/detector.onnx",
-  "classifier_onnx": "models/classifier.onnx",
+  "classifier_onnx": "models/classifier_13cls.onnx",
   "detector_input_size": 640,
   "classifier_input_size": 224,
+  "detector_conf_threshold": 0.25,
+  "reject_class": "other",
   "class_names": [
     "ants",
     "bees",
@@ -12,6 +14,7 @@
     "earwig",
     "grasshopper",
     "moth",
+    "other",
     "slug",
     "snail",
     "wasp",
@@ -91,8 +94,14 @@
       "common_name": "Weevil",
       "scientific_name": "",
       "damage_symptoms": ""
+    },
+    "other": {
+      "common_name": "Not an insect",
+      "scientific_name": null,
+      "damage_symptoms": null,
+      "is_specimen": false
     }
   },
-  "classifier_macro_f1": 0.9440926913280783,
+  "classifier_macro_f1": null,
   "detector_map50": 0.9636
 }

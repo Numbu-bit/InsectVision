@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#1b5e20">
 <title>InsectVision</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -10,24 +12,27 @@
 
 <header class="topbar">
   <div class="topbar-inner">
-    <span class="brand">🐛 InsectVision</span>
-    <span id="modeBadge" class="mode-badge" hidden></span>
+    <div class="brand-block">
+      <span class="brand">🐛 InsectVision</span>
+      <span class="tagline">Point, shoot, identify -- and know when it's not an insect at all.</span>
+    </div>
+    <div class="badges">
+      <span id="modeBadge" class="mode-badge" hidden></span>
+      <span id="modelBadge" class="mode-badge model-badge" hidden title="Classifier validation macro-F1"></span>
+    </div>
   </div>
 </header>
 
 <main class="container">
 
-  <!-- ==================== WHAT CAN BE TESTED ==================== -->
-  <section id="supportedCard" class="card" hidden>
-    <h2 class="card-title-sm">What can this identify?</h2>
-    <p class="card-subtitle">Trained to recognise these species. Photos of anything else may still
-      run, but the result won't be reliable -- and any guess below 75% confidence is always
-      flagged as uncertain, never presented as certain.</p>
-    <div id="supportedGroups"></div>
-  </section>
-
   <!-- ============================== CAPTURE ============================== -->
   <section id="captureCard" class="card">
+    <ol class="steps" aria-label="How it works">
+      <li class="step is-active" data-step="1"><span class="step-num">1</span>Photo</li>
+      <li class="step" data-step="2"><span class="step-num">2</span>Analyse</li>
+      <li class="step" data-step="3"><span class="step-num">3</span>Verdict</li>
+    </ol>
+
     <h1 class="card-title">Scan a photo</h1>
     <p class="card-subtitle">Get close so the insect fills most of the frame. Once you've picked a
       photo, drag the box to zoom in even more if it's still small in the picture.</p>
@@ -35,10 +40,11 @@
     <div id="dropzone" class="dropzone">
       <div id="emptyState" class="empty-state">
         <div class="empty-icon" aria-hidden="true">📷</div>
-        <p>Take a photo or choose one from your gallery</p>
+        <p>Take a photo, use your webcam, or choose one from your gallery</p>
         <div class="capture-buttons">
-          <button type="button" id="takePhotoBtn" class="btn btn-primary">Take Photo</button>
-          <button type="button" id="chooseFileBtn" class="btn btn-secondary">Choose File</button>
+          <button type="button" id="takePhotoBtn" class="btn btn-primary">📱 Take Photo</button>
+          <button type="button" id="webcamBtn" class="btn btn-primary" hidden>🎥 Use Webcam</button>
+          <button type="button" id="chooseFileBtn" class="btn btn-secondary">🖼️ Choose File</button>
         </div>
         <p class="dropzone-hint">or drag &amp; drop an image here</p>
       </div>
@@ -56,9 +62,9 @@
         <p class="crop-hint">If the insect looks small, drag the box tighter around it (or tap
           "Zoom to center") before analysing.</p>
         <div class="preview-actions">
-          <button type="button" id="zoomCenterBtn" class="btn btn-secondary btn-small">Zoom to center</button>
-          <button type="button" id="resetCropBtn" class="btn btn-secondary btn-small">Use full photo</button>
-          <button type="button" id="replaceBtn" class="btn btn-secondary btn-small">Replace photo</button>
+          <button type="button" id="zoomCenterBtn" class="btn btn-secondary btn-small">🔍 Zoom to center</button>
+          <button type="button" id="resetCropBtn" class="btn btn-secondary btn-small">⬜ Use full photo</button>
+          <button type="button" id="replaceBtn" class="btn btn-secondary btn-small">🔄 Replace photo</button>
         </div>
       </div>
     </div>
@@ -89,6 +95,8 @@
     </div>
 
     <div id="successView" hidden>
+      <div id="verdictBanner" class="verdict-banner" role="status" hidden></div>
+
       <!-- cascade mode: per-species tally + detection list -->
       <div id="cascadeResults" hidden>
         <div id="resultImageWrap" class="result-image-wrap" hidden>
@@ -101,7 +109,7 @@
 
       <!-- classifier-only mode: top-3 predictions -->
       <div id="classifierResults" hidden>
-        <h3 class="section-heading">Top matches</h3>
+        <h3 id="topMatchesHeading" class="section-heading">Top matches</h3>
         <div id="topPredictionsList" class="detection-list"></div>
       </div>
 
@@ -109,6 +117,19 @@
 
       <button type="button" id="scanAnotherBtn" class="btn btn-primary btn-large">Scan another</button>
     </div>
+  </section>
+
+  <!-- ==================== WHAT CAN BE TESTED ==================== -->
+  <section id="supportedCard" class="card" hidden>
+    <details class="supported-details">
+      <summary class="card-title-sm">What can this identify? <span id="supportedCount" class="count-pill"></span></summary>
+      <p class="card-subtitle">Trained to recognise these species. Any guess below
+        <span data-threshold-pct>75%</span> confidence is always flagged as uncertain, never presented
+        as certain.<span id="rejectNote" hidden> The model has also been trained to recognise when a
+        photo contains <strong>none</strong> of these -- a tree, a leaf, a hand -- and will say so
+        rather than guess a species.</span></p>
+      <div id="supportedGroups"></div>
+    </details>
   </section>
 
   <section id="notConfiguredCard" class="card" hidden>
@@ -120,10 +141,30 @@
 
 </main>
 
+<!-- ============================== WEBCAM ============================== -->
+<div id="webcamModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="webcamTitle" hidden>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <h2 id="webcamTitle">Webcam</h2>
+      <button type="button" id="webcamCancelBtn" class="btn btn-secondary btn-small" aria-label="Close webcam">✕ Close</button>
+    </div>
+    <div class="webcam-stage">
+      <video id="webcamVideo" autoplay playsinline muted></video>
+      <div class="webcam-guide" aria-hidden="true"></div>
+    </div>
+    <p id="webcamError" class="field-error" role="alert" hidden></p>
+    <p class="crop-hint">Hold the insect inside the frame, keep still, then capture.</p>
+    <div class="preview-actions">
+      <button type="button" id="webcamCaptureBtn" class="btn btn-primary" disabled>📸 Capture</button>
+      <button type="button" id="webcamSwitchBtn" class="btn btn-secondary" hidden>🔁 Switch camera</button>
+    </div>
+  </div>
+</div>
+
 <footer class="footer">
   <p>InsectVision identifies insect species from a photo. It is not infallible, and any
-    identification below 75% confidence is always flagged as uncertain rather than presented
-    as fact.</p>
+    identification below <span data-threshold-pct>75%</span> confidence is always flagged as
+    uncertain rather than presented as fact.</p>
 </footer>
 
 <script src="/static/app.js"></script>

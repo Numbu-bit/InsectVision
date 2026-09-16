@@ -11,7 +11,16 @@ directly inside the Colab notebook (Step 3), not here.
 Usage:
     kaggle datasets download -d vencerlanz09/agricultural-pests-image-dataset \\
         -p data/raw --unzip
-    python scripts/prepare_data.py --source data/raw
+    python scripts/prepare_data.py --source data/raw --negatives data/negatives
+
+--negatives is a folder (flat or nested, any depth) of images that contain
+NO insect: leaves, bark, soil, sky, hands, tools, walls, diagrams, blurry
+nothing. They become the classifier's reject class, "other" (see
+src/decision_tree.REJECT_CLASS). Without it the classifier is closed-set:
+a softmax over only insect classes is *forced* to call a photo of a tree
+some insect, which is how "beetle 56%" on a tree happens. The script warns
+loudly, but still runs, if the folder is missing -- so an old-style
+12-class model can still be reproduced deliberately.
 
 This script does not call the Kaggle API itself -- getting the raw dataset
 onto disk (via the `kaggle` CLI above, or a manual download-and-unzip from
@@ -21,6 +30,7 @@ data/raw, matching the command above, so the two are meant to be run back to
 back.
 """
 import argparse
+import hashlib
 import json
 import random
 import shutil
@@ -30,7 +40,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.decision_tree import TaxonStatus  # noqa: E402
+from src.decision_tree import REJECT_CLASS, TaxonStatus  # noqa: E402
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
@@ -140,13 +150,43 @@ def discover_classes(class_root: Path) -> dict[str, list[Path]]:
     return classes
 
 
+def discover_negatives(negatives_root: Path) -> list[Path]:
+    """Every image under --negatives, at any depth. Unlike the Kaggle
+    classes, negatives are usually gathered from several sources into
+    sub-folders (leaves/, soil/, hands/ ...) -- all of it is one class."""
+    return sorted(p for p in negatives_root.rglob("*")
+                  if p.is_file() and p.suffix.lower() in IMAGE_EXTS)
+
+
+def _content_hash(path: Path) -> str:
+    return hashlib.sha1(path.read_bytes()).hexdigest()
+
+
+def dedupe_exact(images: list[Path]) -> tuple[list[Path], int]:
+    """Drop byte-identical duplicates. Kaggle scrapes commonly contain the
+    same file under two names; if both copies land on opposite sides of the
+    train/val split, the validation score is inflated for free. Exact-hash
+    only -- near-duplicates (re-encoded/resized copies) would need
+    perceptual hashing, which is out of scope here.
+    # REVIEW: consider a pHash pass if val macro-F1 looks too good to be true."""
+    seen: set[str] = set()
+    kept: list[Path] = []
+    for p in images:
+        h = _content_hash(p)
+        if h in seen:
+            continue
+        seen.add(h)
+        kept.append(p)
+    return kept, len(images) - len(kept)
+
+
 def split_and_copy(classes: dict[str, list[Path]], out_dir: Path,
                    max_per_class: int, val_fraction: float, seed: int) -> dict[str, dict]:
     rng = random.Random(seed)
     summary: dict[str, dict] = {}
 
     for taxon, images in classes.items():
-        pool = images.copy()
+        pool, n_dupes = dedupe_exact(images)
         rng.shuffle(pool)
         pool = pool[:max_per_class]
 
@@ -161,6 +201,7 @@ def split_and_copy(classes: dict[str, list[Path]], out_dir: Path,
 
         summary[taxon] = {
             "available": len(images),
+            "duplicates_dropped": n_dupes,
             "used": len(pool),
             "train": len(train_files),
             "val": len(val_files),
@@ -174,6 +215,15 @@ def main() -> None:
                     help="Downloaded+unzipped Kaggle dataset root (default: data/raw)")
     ap.add_argument("--out", default="data/classify",
                     help="Output train/val directory (default: data/classify)")
+    ap.add_argument("--negatives", default="data/negatives",
+                    help=f"Folder of NON-insect images that become the '{REJECT_CLASS}' "
+                         "reject class (default: data/negatives). Searched recursively.")
+    ap.add_argument("--max-negatives", type=int, default=None,
+                    help=f"Cap on '{REJECT_CLASS}' images (default: 2x --max-per-class). "
+                         "Negatives are far more visually diverse than any one insect "
+                         "class, so they warrant more examples -- but not so many they "
+                         "swamp training; the class-weighted loss in the notebook "
+                         "rebalances whatever is left.")
     ap.add_argument("--species-config", default="config/species.json")
     ap.add_argument("--max-per-class", type=int, default=400)
     ap.add_argument("--val-fraction", type=float, default=0.15)
@@ -196,6 +246,27 @@ def main() -> None:
     classes = discover_classes(class_root)
     if not classes:
         raise SystemExit(f"No class folders with images found under {class_root}")
+    if REJECT_CLASS in classes:
+        raise SystemExit(
+            f"The source dataset already has a class named '{REJECT_CLASS}', which is "
+            "reserved for the reject class. Rename that folder or pick a different "
+            "REJECT_CLASS in src/decision_tree.py.")
+
+    negatives_root = (ROOT / args.negatives) if not Path(args.negatives).is_absolute() else Path(args.negatives)
+    negatives = discover_negatives(negatives_root) if negatives_root.exists() else []
+    if negatives:
+        max_neg = args.max_negatives if args.max_negatives is not None else 2 * args.max_per_class
+        classes[REJECT_CLASS] = negatives
+        print(f"Found {len(negatives)} negative (non-insect) images under {negatives_root} "
+              f"-> class '{REJECT_CLASS}' (cap {max_neg})")
+    else:
+        max_neg = args.max_per_class
+        print("\n" + "!" * 70)
+        print(f"WARNING: no negative images found at {negatives_root}.")
+        print(f"The classifier will have NO '{REJECT_CLASS}' class and will be closed-set:")
+        print("any photo of a non-insect will be forced onto the nearest insect class.")
+        print("Pass --negatives <folder of non-insect images> to fix this.")
+        print("!" * 70 + "\n")
 
     print(f"\nDiscovered {len(classes)} classes:")
     low_count_warnings = []
@@ -209,31 +280,57 @@ def main() -> None:
     out_dir = ROOT / args.out
     print(f"\nCopying into {out_dir} (train/val split, capped at "
           f"{args.max_per_class}/class, seed={args.seed})...")
-    summary = split_and_copy(classes, out_dir, args.max_per_class, args.val_fraction, args.seed)
+    # The reject class gets its own, larger cap: split it separately so the
+    # shared --max-per-class cap doesn't silently throw most negatives away.
+    specimen_classes = {t: imgs for t, imgs in classes.items() if t != REJECT_CLASS}
+    summary = split_and_copy(specimen_classes, out_dir, args.max_per_class, args.val_fraction, args.seed)
+    if REJECT_CLASS in classes:
+        summary.update(split_and_copy({REJECT_CLASS: classes[REJECT_CLASS]}, out_dir,
+                                      max_neg, args.val_fraction, args.seed))
 
     print("\nSplit summary:")
     for taxon, s in sorted(summary.items()):
+        dupes = f"  ({s['duplicates_dropped']} exact dupes dropped)" if s["duplicates_dropped"] else ""
         print(f"  {taxon:<25} used {s['used']:>4}/{s['available']:<4}  "
-              f"train {s['train']:>4}  val {s['val']:>4}")
+              f"train {s['train']:>4}  val {s['val']:>4}{dupes}")
 
-    taxon_status = {taxon: guess_status(taxon).value for taxon in classes}
+    # The reject class is not a taxon: it has no pest/beneficial status and
+    # must never appear in the supported-species list or a tally.
+    taxon_status = {taxon: guess_status(taxon).value for taxon in specimen_classes}
     beneficial_or_neutral = {t: s for t, s in taxon_status.items() if s != TaxonStatus.PEST.value}
 
     species_config_path = ROOT / args.species_config
     cfg = json.loads(species_config_path.read_text()) if species_config_path.exists() else {}
+    # class_names is THE index contract: position i here == model output i.
+    # torchvision's ImageFolder sorts folder names the same way, and the
+    # notebook asserts the two agree before training starts.
     cfg["class_names"] = sorted(classes.keys())
     cfg["taxon_status"] = taxon_status
+    cfg["reject_class"] = REJECT_CLASS if REJECT_CLASS in classes else None
     cfg.setdefault("species_info", {})
-    for taxon in classes:
+    for taxon in specimen_classes:
         cfg["species_info"].setdefault(taxon, {
             "common_name": taxon.replace("_", " ").title(),
             "scientific_name": "",
             "damage_symptoms": "",
         })
+    if REJECT_CLASS in classes:
+        cfg["species_info"][REJECT_CLASS] = {
+            "common_name": "Not an insect",
+            "scientific_name": None,
+            "damage_symptoms": None,
+            "is_specimen": False,
+        }
+    else:
+        cfg["species_info"].pop(REJECT_CLASS, None)
     cfg.setdefault("detector_onnx", "models/detector.onnx")
-    cfg.setdefault("classifier_onnx", "models/classifier.onnx")
+    # Named by class count so a 12-class and a 13-class export can never be
+    # confused for one another on disk -- the serve-time loader also checks
+    # the ONNX output width against len(class_names) before accepting it.
+    cfg["classifier_onnx"] = f"models/classifier_{len(classes)}cls.onnx"
     cfg.setdefault("detector_input_size", 640)
     cfg.setdefault("classifier_input_size", 224)
+    cfg.setdefault("detector_conf_threshold", 0.25)
     cfg.setdefault("classifier_macro_f1", None)
     cfg.setdefault("detector_map50", None)
     species_config_path.write_text(json.dumps(cfg, indent=2) + "\n")

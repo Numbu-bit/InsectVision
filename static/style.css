@@ -3,13 +3,14 @@
    reading this on a mid-range phone screen in direct daylight, not a
    developer on a calibrated monitor -- pastel colour-only distinctions
    would be unreadable outdoors, so every status also carries a text label
-   and/or icon, never colour alone. */
+   and/or icon, never colour alone. Dark mode follows the OS setting. */
 
 :root {
+  --green-800: #124a17;
   --green-700: #1b5e20;
   --green-600: #2e7d32;
   --green-100: #e8f5e9;
-  --amber-600: #e65100;
+  --amber-700: #b35c00;
   --amber-100: #fff3e0;
   --red-700: #b71c1c;
   --red-100: #ffebee;
@@ -21,12 +22,36 @@
   --grey-300: #d0d0d0;
   --grey-100: #f5f5f0;
   --surface: #ffffff;
-  --page-bg: #f0f1ec;
+  --surface-2: #f7f8f4;
+  --page-bg: #eef1ea;
   --focus-ring: #1565c0;
+  --shadow: 0 1px 2px rgba(20, 40, 20, 0.06), 0 8px 24px -12px rgba(20, 40, 20, 0.25);
 
-  --radius: 14px;
+  --radius: 16px;
   --gap: 16px;
-  --max-width: 640px;
+  --max-width: 680px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --green-100: #1d3a21;
+    --amber-100: #3d2a12;
+    --red-100: #3d1a1a;
+    --blue-100: #16294a;
+    --grey-900: #f1f1ec;
+    --grey-700: #c9c9c2;
+    --grey-500: #9a9a93;
+    --grey-300: #4a4d47;
+    --grey-100: #2a2d28;
+    --surface: #1e211d;
+    --surface-2: #262a25;
+    --page-bg: #141613;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+    --green-700: #43a047;
+    --red-700: #ef5350;
+    --blue-700: #64b5f6;
+    --amber-700: #ffb74d;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -46,33 +71,47 @@ html, body {
 button:focus-visible,
 select:focus-visible,
 input:focus-visible,
-summary:focus-visible {
+summary:focus-visible,
+video:focus-visible {
   outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
+/* ---------------------------------------------------------------- */
+/* Header                                                            */
+/* ---------------------------------------------------------------- */
 .topbar {
-  background: var(--green-700);
+  background: linear-gradient(135deg, var(--green-800) 0%, var(--green-600) 100%);
   color: white;
   position: sticky;
   top: 0;
   z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
 }
 .topbar-inner {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 14px 16px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
-.brand { font-size: 1.15rem; font-weight: 700; }
+.brand-block { display: flex; flex-direction: column; min-width: 0; }
+.brand { font-size: 1.2rem; font-weight: 800; letter-spacing: 0.01em; }
+.tagline { font-size: 0.78rem; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badges { display: flex; gap: 6px; flex-shrink: 0; }
 .mode-badge {
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-weight: 700;
   background: rgba(255,255,255,0.18);
   padding: 4px 10px;
   border-radius: 999px;
+  white-space: nowrap;
+}
+.model-badge { background: rgba(255,255,255,0.28); }
+@media (max-width: 480px) {
+  .tagline { display: none; }
 }
 
 .container {
@@ -85,18 +124,72 @@ summary:focus-visible {
 .card {
   background: var(--surface);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 22px 20px;
   margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  box-shadow: var(--shadow);
+  border: 1px solid color-mix(in srgb, var(--grey-300) 55%, transparent);
 }
 
-.card-title { margin: 0 0 4px; font-size: 1.4rem; }
-.card-title-sm { margin: 0 0 4px; font-size: 1.1rem; }
+.card-title { margin: 0 0 4px; font-size: 1.45rem; letter-spacing: -0.01em; }
+.card-title-sm { margin: 0; font-size: 1.05rem; font-weight: 700; cursor: pointer; }
 .card-subtitle { margin: 0 0 16px; color: var(--grey-700); font-size: 0.95rem; }
+
+/* ---------------------------------------------------------------- */
+/* Steps strip                                                       */
+/* ---------------------------------------------------------------- */
+.steps {
+  list-style: none;
+  display: flex;
+  gap: 8px;
+  padding: 0;
+  margin: 0 0 18px;
+}
+.step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--grey-500);
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.step-num {
+  display: inline-flex;
+  width: 22px; height: 22px;
+  align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--grey-300);
+  color: var(--grey-900);
+  font-size: 0.75rem;
+}
+.step.is-active { color: var(--green-700); background: var(--green-100); }
+.step.is-active .step-num { background: var(--green-600); color: white; }
+.step.is-done .step-num { background: var(--green-700); color: white; }
 
 /* ---------------------------------------------------------------- */
 /* Supported-species reference list                                  */
 /* ---------------------------------------------------------------- */
+.supported-details summary { list-style: none; display: flex; align-items: center; gap: 8px; }
+.supported-details summary::-webkit-details-marker { display: none; }
+.supported-details summary::after {
+  content: "▾";
+  margin-left: auto;
+  color: var(--grey-500);
+  transition: transform 0.15s;
+}
+.supported-details[open] summary::after { transform: rotate(180deg); }
+.supported-details[open] summary { margin-bottom: 8px; }
+.count-pill {
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--grey-100);
+  color: var(--grey-700);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
 .species-group { margin-bottom: 14px; }
 .species-group:last-child { margin-bottom: 0; }
 .species-group-heading {
@@ -125,16 +218,18 @@ summary:focus-visible {
 .dropzone {
   border: 2px dashed var(--grey-300);
   border-radius: var(--radius);
-  padding: 24px 16px;
+  padding: 28px 16px;
   text-align: center;
-  transition: border-color 0.15s, background 0.15s;
+  background: var(--surface-2);
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
 }
 .dropzone.drag-over {
   border-color: var(--green-600);
   background: var(--green-100);
+  transform: scale(1.01);
 }
 
-.empty-icon { font-size: 2.5rem; margin-bottom: 8px; }
+.empty-icon { font-size: 2.6rem; margin-bottom: 6px; }
 .empty-state p { margin: 0 0 16px; color: var(--grey-700); }
 
 .capture-buttons {
@@ -143,54 +238,46 @@ summary:focus-visible {
   justify-content: center;
   flex-wrap: wrap;
 }
-
 .dropzone-hint {
-  margin-top: 14px !important;
-  font-size: 0.85rem;
-  color: var(--grey-500);
+  margin: 14px 0 0 !important;
+  font-size: 0.82rem;
+  color: var(--grey-500) !important;
 }
 
 .preview-state { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-/* Same `display` vs `[hidden]` precedence issue as .spinner above (see the
-   comment there) -- without this, #previewState (which starts `hidden` in
-   the markup, with an empty <img> inside) would render from page load,
-   before any photo is ever picked. */
 .preview-state[hidden] { display: none; }
 #previewImg {
   display: block;
   max-width: 100%;
-  max-height: 340px;
+  max-height: 60vh;
   border-radius: 10px;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
-/* Crop/zoom tool: a draggable, resizable box over the preview so a user
-   can tighten framing around a small/distant insect after the fact --
-   the actual camera viewfinder (native OS camera app via capture=
-   "environment") isn't something a web page can overlay or control, so
-   this is the closest equivalent to "zoom in before analysing" achievable
-   in a browser. */
+/* Crop tool -- the box darkens everything outside itself via a huge
+   box-shadow spread, so it must stay hidden until it has real dimensions. */
 .crop-container {
   position: relative;
   display: inline-block;
-  max-width: 100%;
-  touch-action: none; /* let pointer events handle drag without the page also scrolling */
+  line-height: 0;
+  touch-action: none;
 }
 .crop-box {
   position: absolute;
   border: 2px solid #ffffff;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
   cursor: move;
   border-radius: 4px;
 }
+.crop-box[hidden] { display: none; }
 .crop-handle {
   position: absolute;
-  width: 20px;
-  height: 20px;
-  margin: -10px;
+  width: 22px; height: 22px;
   background: white;
   border: 2px solid var(--green-600);
   border-radius: 50%;
-  touch-action: none;
+  margin: -10px;
 }
 .crop-handle[data-handle="nw"] { top: 0; left: 0; cursor: nwse-resize; }
 .crop-handle[data-handle="ne"] { top: 0; right: 0; margin-right: -10px; cursor: nesw-resize; }
@@ -207,23 +294,23 @@ summary:focus-visible {
   min-height: 44px;
   padding: 10px 18px;
   font-size: 1rem;
-  font-weight: 600;
-  border-radius: 10px;
+  font-weight: 700;
+  border-radius: 12px;
   border: 2px solid transparent;
   cursor: pointer;
   font-family: inherit;
-  transition: opacity 0.15s, transform 0.05s;
+  transition: opacity 0.15s, transform 0.05s, background 0.15s, box-shadow 0.15s;
 }
 .btn:active { transform: scale(0.98); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.btn-primary { background: var(--green-600); color: white; }
+.btn-primary { background: var(--green-600); color: white; box-shadow: 0 2px 0 var(--green-800); }
 .btn-primary:hover:not(:disabled) { background: var(--green-700); }
 
 .btn-secondary { background: var(--surface); color: var(--green-700); border-color: var(--green-600); }
 .btn-secondary:hover:not(:disabled) { background: var(--green-100); }
 
-.btn-large { width: 100%; min-height: 52px; font-size: 1.05rem; margin-top: 18px; }
+.btn-large { width: 100%; min-height: 54px; font-size: 1.05rem; margin-top: 18px; }
 .btn-small { min-height: 38px; font-size: 0.9rem; padding: 6px 14px; }
 
 .spinner {
@@ -236,16 +323,10 @@ summary:focus-visible {
   vertical-align: middle;
   animation: spin 0.7s linear infinite;
 }
-/* `.spinner { display: inline-block }` above otherwise wins over the
-   `hidden` attribute's UA-stylesheet `display: none` -- author rules that
-   set `display` on an element always beat the UA default regardless of
-   selector specificity or source order, so a plain `.spinner` rule alone
-   makes `hidden` a no-op on this element (and its `infinite` animation
-   keeps spinning even while "hidden"). This higher-specificity override
-   is what actually makes JS's `el("analyseSpinner").hidden = true` work. */
-.spinner[hidden] {
-  display: none;
-}
+/* Author `display` rules beat the UA stylesheet's [hidden] { display:none }
+   regardless of specificity, so this explicit override is what actually
+   makes `el("analyseSpinner").hidden = true` work. */
+.spinner[hidden] { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------------------------------------------------------------- */
@@ -262,6 +343,49 @@ summary:focus-visible {
 }
 
 /* ---------------------------------------------------------------- */
+/* Webcam modal                                                      */
+/* ---------------------------------------------------------------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal[hidden] { display: none; }
+.modal-panel {
+  width: 100%;
+  max-width: 720px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; }
+.modal-head h2 { margin: 0; font-size: 1.1rem; }
+.webcam-stage {
+  position: relative;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+}
+#webcamVideo { width: 100%; height: 100%; object-fit: cover; display: block; }
+.webcam-guide {
+  position: absolute;
+  inset: 12%;
+  border: 2px dashed rgba(255,255,255,0.75);
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- */
 /* Result: rejected / quality-gate failure                           */
 /* ---------------------------------------------------------------- */
 .reject-icon { font-size: 2.5rem; text-align: center; }
@@ -275,17 +399,34 @@ summary:focus-visible {
 .reject-score-label { text-align: center; color: var(--grey-700); font-size: 0.9rem; }
 
 /* ---------------------------------------------------------------- */
+/* Verdict banner -- the one-line answer, above the detail            */
+/* ---------------------------------------------------------------- */
+.verdict-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.verdict-banner[hidden] { display: none; }
+.verdict-banner .verdict-icon { font-size: 1.6rem; line-height: 1; }
+.verdict-banner .verdict-text { display: flex; flex-direction: column; gap: 2px; }
+.verdict-banner .verdict-sub { font-size: 0.85rem; font-weight: 500; color: var(--grey-700); }
+.verdict-banner.confirmed { background: var(--green-100); color: var(--green-700); border-color: var(--green-600); }
+.verdict-banner.uncertain { background: var(--amber-100); color: var(--amber-700); border-color: var(--amber-700); }
+.verdict-banner.none { background: var(--grey-100); color: var(--grey-900); border-color: var(--grey-300); }
+
+/* ---------------------------------------------------------------- */
 /* Detections / tally                                                */
 /* ---------------------------------------------------------------- */
-
-/* The analysed photo with a box drawn around each detection (see
-   drawDetections in app.js) -- the canvas is sized to the photo's actual
-   pixel dimensions in JS and then just scaled down to fit here. */
 .result-image-wrap { text-align: center; margin-bottom: 16px; }
 .result-image-wrap[hidden] { display: none; }
-#resultCanvas { max-width: 100%; height: auto; border-radius: 10px; }
+#resultCanvas { max-width: 100%; height: auto; border-radius: 12px; box-shadow: var(--shadow); }
 
-.section-heading { font-size: 1rem; margin: 20px 0 8px; }
+.section-heading { font-size: 0.85rem; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--grey-700); }
 
 .tally { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .tally-chip {
@@ -299,12 +440,29 @@ summary:focus-visible {
 .tally-chip.beneficial { background: var(--green-100); color: var(--green-700); }
 .tally-chip.neutral { background: var(--grey-100); color: var(--grey-700); }
 
+/* "No known insect recognised" -- deliberately colourless: no red/green
+   status language, no confidence bar. See noSpecimenBlock() in app.js. */
+.no-specimen {
+  text-align: center;
+  padding: 22px 12px;
+  border: 1px dashed var(--grey-300);
+  border-radius: 12px;
+  color: var(--grey-700);
+  background: var(--surface-2);
+}
+.no-specimen-icon { font-size: 2rem; margin-bottom: 4px; }
+.no-specimen h3 { margin: 4px 0 6px; color: var(--grey-900); font-size: 1.05rem; }
+.no-specimen p { margin: 0 0 6px; font-size: 0.92rem; }
+.no-specimen-row { border-style: dashed; color: var(--grey-700); }
+.status-tag.none { background: var(--grey-100); color: var(--grey-500); }
+
 .detection-list { display: flex; flex-direction: column; gap: 10px; }
 
 .detection-row {
   border: 1px solid var(--grey-300);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--surface-2);
 }
 .detection-row-top {
   display: flex;
@@ -313,7 +471,7 @@ summary:focus-visible {
   gap: 8px;
   margin-bottom: 6px;
 }
-.detection-name { font-weight: 700; text-transform: capitalize; }
+.detection-name { font-weight: 800; text-transform: capitalize; font-size: 1.05rem; }
 .status-tag {
   font-size: 0.72rem;
   font-weight: 700;
@@ -335,7 +493,7 @@ summary:focus-visible {
   border-radius: 999px;
 }
 
-/* Confidence bar with a visible tick at the 0.75 hard-rule threshold --
+/* Confidence bar with a visible tick at the confirmation threshold --
    the threshold must be visually obvious, not just implied by colour. */
 .confidence-bar-wrap {
   position: relative;
@@ -347,14 +505,15 @@ summary:focus-visible {
 .confidence-bar-fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--green-600);
+  background: linear-gradient(90deg, var(--green-600), var(--green-700));
+  transition: width 0.4s ease-out;
 }
 .confidence-bar-fill.below-threshold { background: var(--grey-500); }
 .confidence-threshold-tick {
   position: absolute;
   top: -3px;
   bottom: -3px;
-  left: 75%;
+  left: 75%; /* overridden inline from the server's confidence_threshold */
   width: 2px;
   background: var(--grey-900);
 }
@@ -394,4 +553,8 @@ code {
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 0.9em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation-duration: 0.01ms !important; }
 }
