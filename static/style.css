@@ -1,19 +1,17 @@
 /* InsectVision -- plain CSS, no build step.
-   Mobile-first and high-contrast on purpose: the primary user is a farmer
-   reading this on a mid-range phone screen in direct daylight, not a
-   developer on a calibrated monitor -- pastel colour-only distinctions
-   would be unreadable outdoors, so every status also carries a text label
-   and/or icon, never colour alone.
 
-   Theme is deliberately locked to LIGHT (white cards, green header): it is the
-   interface presented in phases 1 and 2 and must stay recognisable. No
-   prefers-color-scheme override.
+   Layout: a "stage + sidebar" dashboard. The stage (left) is the one place
+   the photo, the live camera and the analysed result all appear, with an
+   instrument strip of counts under it; the sidebar (right) holds the
+   verdict, the detections, the species reference and the model facts.
+   On phones the two columns simply stack.
 
-   Layout scales with the device:
-     phone   (< 640px)   single column, everything full width
-     tablet  (640-1023)  single wider column
-     desktop (>= 1024)   species strip across the top, then a two-column
-                         workspace: scanner on the left, results on the right */
+   Theme is locked to LIGHT (white cards, green header): it is the interface
+   presented in phases 1 and 2. The stage itself is a dark frame, the way
+   any camera viewfinder or photo viewer is, so pictures read well on it.
+
+   High contrast on purpose: the primary user is reading this on a phone in
+   daylight. Every status carries a text label, never colour alone. */
 
 :root {
   --green-800: #124a17;
@@ -34,15 +32,16 @@
   --surface: #ffffff;
   --surface-2: #f7f8f4;
   --page-bg: #eef1ea;
+  --stage-bg: #172019;        /* deep green-charcoal viewfinder */
+  --stage-fg: #e6ede6;
   --focus-ring: #1565c0;
   --shadow: 0 1px 2px rgba(20, 40, 20, 0.06), 0 8px 24px -12px rgba(20, 40, 20, 0.25);
 
   --radius: 16px;
   --gap: 20px;
-  --max-width: 1240px;      /* desktop workspace */
-  --max-width-narrow: 720px; /* tablet single column */
+  --max-width: 1320px;
+  --side-width: 400px;
 }
-
 
 * { box-sizing: border-box; }
 
@@ -52,20 +51,13 @@ html, body {
   background: var(--page-bg);
   color: var(--grey-900);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  /* Fluid base size: 16px on a phone up to 18px on a wide desktop, so the
-     UI reads at a natural size on both instead of looking like a phone
-     page blown up on a laptop. */
-  font-size: clamp(16px, 0.95rem + 0.25vw, 18px);
+  font-size: clamp(15px, 0.9rem + 0.25vw, 17px);
   line-height: 1.5;
   min-height: 100vh;
 }
 
-/* Every interactive control gets a visible focus ring -- required for
-   keyboard accessibility, not optional polish. */
 button:focus-visible,
-select:focus-visible,
 input:focus-visible,
-summary:focus-visible,
 video:focus-visible {
   outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
@@ -85,16 +77,18 @@ video:focus-visible {
 .topbar-inner {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 14px 20px;
+  padding: 12px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 .brand-block { display: flex; flex-direction: column; min-width: 0; }
-.brand { font-size: 1.2rem; font-weight: 800; letter-spacing: 0.01em; }
-.tagline { font-size: 0.78rem; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.badges { display: flex; gap: 6px; flex-shrink: 0; }
+.brand { font-size: 1.25rem; font-weight: 800; white-space: nowrap; }
+.tagline { font-size: 0.8rem; opacity: 0.88; }
+.topbar-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.badges { display: flex; gap: 6px; }
 .mode-badge {
   font-size: 0.75rem;
   font-weight: 700;
@@ -104,231 +98,206 @@ video:focus-visible {
   white-space: nowrap;
 }
 .model-badge { background: rgba(255,255,255,0.28); }
-.brand { white-space: nowrap; }
-@media (max-width: 520px) {
-  /* Badges drop to their own row so the brand never wraps mid-word */
-  .topbar-inner { flex-wrap: wrap; gap: 6px 12px; padding: 10px 16px; }
-  .brand-block { flex: 1 1 100%; }
+
+/* Colour key, like a map legend */
+.legend {
+  list-style: none;
+  display: flex;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  flex-wrap: wrap;
+}
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(255,255,255,0.14);
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.swatch.pest { background: #ff6b6b; }
+.swatch.beneficial { background: #7ddc8a; }
+.swatch.neutral { background: #cfd6cf; }
+.swatch.review { background: #6fa8ff; }
+.swatch.none { background: #9a9a93; outline: 1px dashed rgba(255,255,255,0.6); }
+
+@media (max-width: 720px) {
   .tagline { display: none; }
-  .brand { font-size: 1.1rem; }
-  .badges { flex-wrap: wrap; }
+  .legend { display: none; }   /* the sidebar cards carry the same labels in full */
+  .topbar-inner { padding: 10px 16px; }
 }
 
-.container {
-  max-width: var(--max-width-narrow);
+/* ---------------------------------------------------------------- */
+/* Dashboard grid                                                    */
+/* ---------------------------------------------------------------- */
+.dashboard {
+  max-width: var(--max-width);
   margin: 0 auto;
-  padding: 16px;
-  padding-bottom: 48px;
+  padding: 20px 16px 48px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gap);
 }
-
-/* ---------------------------------------------------------------- */
-/* Responsive workspace                                              */
-/* ---------------------------------------------------------------- */
-.workspace { display: block; }
-.placeholder-card { display: none; }          /* desktop only, see below */
-
 @media (min-width: 1024px) {
-  .container {
-    max-width: var(--max-width);
-    padding: 24px 28px 64px;
-  }
-  .workspace {
-    display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-    gap: var(--gap);
+  .dashboard {
+    padding: 24px 24px 64px;
+    grid-template-columns: minmax(0, 1fr) var(--side-width);
     align-items: start;
   }
-  .col-scan { grid-column: 1; }
-  .col-result { grid-column: 2; }
-  /* The results column always has something in it: the live result, or
-     the placeholder explaining what will appear. JS toggles which. */
-  .placeholder-card:not([hidden]) {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 420px;
-    border-style: dashed;
-    background: var(--surface-2);
-    box-shadow: none;
-  }
-  .placeholder-inner { text-align: center; max-width: 380px; color: var(--grey-700); }
-  .placeholder-inner h2 { margin: 6px 0 8px; color: var(--grey-900); font-size: 1.2rem; }
-  .placeholder-inner p { margin: 0; font-size: 0.95rem; }
-  #previewImg { max-height: 62vh; }
-  .card { padding: 26px 28px; }
-  .card-title { font-size: 1.6rem; }
+  .side-col { position: sticky; top: 84px; max-height: calc(100vh - 100px); overflow-y: auto; padding-right: 2px; }
 }
-
-@media (min-width: 1400px) {
-  :root { --max-width: 1360px; }
+@media (min-width: 1500px) {
+  :root { --max-width: 1480px; --side-width: 440px; }
 }
+.span-all { grid-column: 1 / -1; }
 
+/* When the page auto-scrolls to the verdict on a phone, leave room for the
+   sticky header instead of sliding the card underneath it. */
+#verdictCard { scroll-margin-top: 84px; }
+
+/* ---------------------------------------------------------------- */
+/* Cards                                                             */
+/* ---------------------------------------------------------------- */
 .card {
   background: var(--surface);
   border-radius: var(--radius);
-  padding: 22px 20px;
-  margin-bottom: 16px;
+  padding: 18px 20px;
+  margin-bottom: var(--gap);
   box-shadow: var(--shadow);
-  border: 1px solid color-mix(in srgb, var(--grey-300) 55%, transparent);
+  border: 1px solid #e3e6df;
 }
-
-.card-title { margin: 0 0 4px; font-size: 1.45rem; letter-spacing: -0.01em; }
-.card-title-sm { margin: 0; font-size: 1.05rem; font-weight: 700; cursor: pointer; }
-.card-subtitle { margin: 0 0 16px; color: var(--grey-700); font-size: 0.95rem; }
-
-/* ---------------------------------------------------------------- */
-/* Steps strip                                                       */
-/* ---------------------------------------------------------------- */
-.steps {
-  list-style: none;
-  display: flex;
-  gap: 8px;
-  padding: 0;
-  margin: 0 0 18px;
-}
-.step {
-  flex: 1;
+.side-col .card:last-child { margin-bottom: 0; }
+.card-heading {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--grey-700);
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--grey-500);
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--surface-2);
 }
-.step-num {
-  display: inline-flex;
-  width: 22px; height: 22px;
-  align-items: center; justify-content: center;
-  border-radius: 50%;
-  background: var(--grey-300);
-  color: var(--grey-900);
-  font-size: 0.75rem;
-}
-.step.is-active { color: var(--green-700); background: var(--green-100); }
-.step.is-active .step-num { background: var(--green-600); color: white; }
-.step.is-done .step-num { background: var(--green-700); color: white; }
-
-/* ---------------------------------------------------------------- */
-/* Supported-species reference list                                  */
-/* ---------------------------------------------------------------- */
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
-.card-title-sm { cursor: default; display: flex; align-items: center; gap: 8px; }
-.supported-groups { display: flex; flex-direction: column; gap: 12px; }
-@media (min-width: 760px) {
-  /* Pests / beneficial / neutral side by side instead of stacked */
-  .supported-groups { flex-direction: row; flex-wrap: wrap; gap: 12px 32px; }
-  .species-group { margin-bottom: 0; }
-}
+.card-subtitle { margin: 0 0 14px; color: var(--grey-700); font-size: 0.92rem; }
+.muted { margin: 0; color: var(--grey-500); font-size: 0.92rem; }
 .count-pill {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
   background: var(--grey-100);
   color: var(--grey-700);
   padding: 2px 8px;
   border-radius: 999px;
+  letter-spacing: 0;
+  text-transform: none;
 }
-.species-group { margin-bottom: 14px; }
-.species-group:last-child { margin-bottom: 0; }
-.species-group-heading {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--grey-700);
-  margin: 0 0 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.species-chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
-.species-chip {
-  font-size: 0.88rem;
-  font-weight: 600;
-  padding: 6px 13px;
-  border-radius: 999px;
-  text-transform: capitalize;
-  border: 1px solid transparent;
-}
-.species-chip.pest { background: var(--red-100); color: var(--red-700); border-color: #f3c2c2; }
-.species-chip.beneficial { background: var(--green-100); color: var(--green-700); border-color: #bfe3c3; }
-.species-chip.neutral { background: var(--grey-100); color: var(--grey-700); border-color: var(--grey-300); }
 
 /* ---------------------------------------------------------------- */
-/* Capture / dropzone                                                */
+/* Stage column                                                      */
 /* ---------------------------------------------------------------- */
-.dropzone {
-  border: 2px dashed var(--grey-300);
-  border-radius: var(--radius);
-  padding: 28px 16px;
-  text-align: center;
-  background: var(--surface-2);
-  transition: border-color 0.15s, background 0.15s, transform 0.15s;
-}
-.dropzone.drag-over {
-  border-color: var(--green-600);
-  background: var(--green-100);
-  transform: scale(1.01);
-}
-
-.empty-icon { font-size: 2.6rem; margin-bottom: 6px; }
-.empty-state p { margin: 0 0 16px; color: var(--grey-700); }
-
-.capture-buttons {
+.source-bar {
   display: flex;
-  gap: 10px;
-  justify-content: center;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
   flex-wrap: wrap;
 }
+.source-tabs { display: flex; gap: 6px; background: var(--surface); padding: 4px; border-radius: 12px; border: 1px solid #e3e6df; }
+.tab {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.92rem;
+  padding: 8px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: var(--grey-700);
+}
+.tab.is-active { background: var(--green-600); color: white; }
+.tab:not(.is-active):hover { background: var(--green-100); color: var(--green-700); }
+
+.stage-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--grey-700);
+}
+.stage-status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--grey-300); }
+.stage-status.ok .dot { background: var(--green-600); }
+.stage-status.busy .dot { background: var(--amber-700); animation: pulse 1s ease-in-out infinite; }
+.stage-status.live .dot { background: #e53935; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+
+.stage {
+  position: relative;
+  background: var(--stage-bg);
+  color: var(--stage-fg);
+  border-radius: 14px 14px 0 0;
+  min-height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+@media (min-width: 1024px) { .stage { min-height: 520px; } }
+.stage-panel { width: 100%; display: flex; align-items: center; justify-content: center; }
+.stage-panel[hidden] { display: none; }
+
+/* empty state, on the dark frame */
+.stage-empty {
+  flex-direction: column;
+  text-align: center;
+  padding: 40px 24px;
+  border: 2px dashed rgba(255,255,255,0.22);
+  border-radius: 12px;
+  margin: 16px;
+  width: calc(100% - 32px);
+  min-height: 340px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.stage-empty.drag-over { border-color: #7ddc8a; background: rgba(125,220,138,0.08); }
+.empty-icon { font-size: 2.8rem; margin-bottom: 6px; }
+.stage-title { margin: 0 0 6px; font-size: 1.35rem; color: white; }
+.stage-text { margin: 0 0 18px; color: rgba(255,255,255,0.78); max-width: 460px; }
+.capture-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 @media (max-width: 480px) {
-  /* Three full-width stacked buttons are easier to hit than a cramped row */
-  .capture-buttons { flex-direction: column; align-items: stretch; }
-  .capture-buttons .btn { width: 100%; }
-}
-@media (min-width: 1024px) {
-  .dropzone { padding: 44px 24px; }
-  .empty-icon { font-size: 3rem; }
-}
-.dropzone-hint {
-  margin: 14px 0 0 !important;
-  font-size: 0.82rem;
-  color: var(--grey-500) !important;
+  .capture-buttons { flex-direction: column; align-items: stretch; width: 100%; }
 }
 
-.preview-state { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.preview-state[hidden] { display: none; }
+/* preview (photo + crop tool) */
+.stage-preview { padding: 12px; }
 #previewImg {
   display: block;
   max-width: 100%;
-  max-height: 60vh;
-  border-radius: 10px;
+  max-height: 68vh;
   user-select: none;
   -webkit-user-drag: none;
 }
-
-/* Crop tool -- the box darkens everything outside itself via a huge
-   box-shadow spread, so it must stay hidden until it has real dimensions. */
 .crop-container {
   position: relative;
   display: inline-block;
   line-height: 0;
   touch-action: none;
-  /* Clip the crop box's darkening overlay to the photo itself. Without
-     this the 9999px box-shadow spread dims the ENTIRE page -- fine as a
-     "focus" effect on a phone, but on desktop it greyed out the results
-     column and the species list sitting next to the photo. */
-  overflow: hidden;
-  border-radius: 10px;
+  overflow: hidden;        /* keeps the darkening overlay on the photo only */
+  border-radius: 8px;
 }
 .crop-box {
   position: absolute;
   border: 2px solid #ffffff;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
   cursor: move;
   border-radius: 4px;
 }
 .crop-box[hidden] { display: none; }
-/* Handles sit INSIDE the box corners (the container now clips overflow),
-   sized for fingers: 26px visual, and the whole corner is the hit target. */
 .crop-handle {
   position: absolute;
   width: 26px; height: 26px;
@@ -341,35 +310,90 @@ video:focus-visible {
 .crop-handle[data-handle="ne"] { top: 2px; right: 2px; cursor: nesw-resize; }
 .crop-handle[data-handle="sw"] { bottom: 2px; left: 2px; cursor: nesw-resize; }
 .crop-handle[data-handle="se"] { bottom: 2px; right: 2px; cursor: nwse-resize; }
+.crop-hint { margin: 8px 0 0; font-size: 0.82rem; color: var(--grey-500); text-align: center; }
 
-.crop-hint { margin: 0; font-size: 0.82rem; color: var(--grey-500); text-align: center; }
-.preview-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+/* camera */
+.stage-camera { position: relative; min-height: 380px; }
+@media (min-width: 1024px) { .stage-camera { min-height: 520px; } }
+#webcamVideo { width: 100%; max-height: 68vh; object-fit: contain; display: block; background: #000; }
+#webcamVideo:not([data-live]) { display: none; }
+.webcam-guide {
+  position: absolute;
+  inset: 12%;
+  border: 2px dashed rgba(255,255,255,0.7);
+  border-radius: 12px;
+  pointer-events: none;
+}
+.webcam-guide[hidden] { display: none; }
+.camera-off { text-align: center; padding: 40px 24px; }
+.camera-off[hidden] { display: none; }
+
+/* result */
+.stage-result { padding: 12px; }
+.result-image-wrap { text-align: center; line-height: 0; }
+.result-image-wrap[hidden] { display: none; }
+#resultCanvas, #resultImg { max-width: 100%; max-height: 68vh; width: auto; height: auto; border-radius: 8px; }
+
+/* instrument strip */
+.stage-strip {
+  background: #0f1511;
+  color: #cfd8cf;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.82rem;
+  padding: 10px 16px;
+  border-radius: 0 0 14px 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.stage-strip b { color: white; font-weight: 700; }
+.stage-strip .sep { color: #4a5a4c; }
+.strip-right { margin-left: auto; }
+.strip-right[hidden] { display: none; }
+
+/* toolbar */
+.stage-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.tool-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.tool-group[hidden] { display: none; }
+.btn-analyse { margin-left: auto; min-width: 200px; }
+.btn-analyse[hidden] { display: none; }
+@media (max-width: 640px) {
+  .stage-toolbar { flex-direction: column; align-items: stretch; }
+  .btn-analyse { margin-left: 0; width: 100%; }
+  .tool-group .btn { flex: 1; }
+}
 
 /* ---------------------------------------------------------------- */
-/* Buttons -- large tap targets, minimum 44px per accessibility norms */
+/* Buttons                                                           */
 /* ---------------------------------------------------------------- */
 .btn {
   min-height: 44px;
   padding: 10px 18px;
-  font-size: 1rem;
+  font-size: 0.98rem;
   font-weight: 700;
   border-radius: 12px;
   border: 2px solid transparent;
   cursor: pointer;
   font-family: inherit;
-  transition: opacity 0.15s, transform 0.05s, background 0.15s, box-shadow 0.15s;
+  transition: opacity 0.15s, transform 0.05s, background 0.15s;
 }
 .btn:active { transform: scale(0.98); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
 .btn-primary { background: var(--green-600); color: white; box-shadow: 0 2px 0 var(--green-800); }
 .btn-primary:hover:not(:disabled) { background: var(--green-700); }
-
 .btn-secondary { background: var(--surface); color: var(--green-700); border-color: var(--green-600); }
 .btn-secondary:hover:not(:disabled) { background: var(--green-100); }
-
-.btn-large { width: 100%; min-height: 54px; font-size: 1.05rem; margin-top: 18px; }
-.btn-small { min-height: 38px; font-size: 0.9rem; padding: 6px 14px; }
+.btn-light { background: white; color: var(--green-800); }
+.btn-light:hover:not(:disabled) { background: var(--green-100); }
+.btn-small { min-height: 38px; font-size: 0.88rem; padding: 6px 14px; }
 
 .spinner {
   display: inline-block;
@@ -381,83 +405,21 @@ video:focus-visible {
   vertical-align: middle;
   animation: spin 0.7s linear infinite;
 }
-/* Author `display` rules beat the UA stylesheet's [hidden] { display:none }
-   regardless of specificity, so this explicit override is what actually
-   makes `el("analyseSpinner").hidden = true` work. */
 .spinner[hidden] { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---------------------------------------------------------------- */
-/* Form fields                                                       */
-/* ---------------------------------------------------------------- */
 .field-error {
   color: var(--red-700);
   background: var(--red-100);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 0.9rem;
-  margin-top: 12px;
+  margin: 12px 0 0;
   font-weight: 600;
 }
 
 /* ---------------------------------------------------------------- */
-/* Webcam modal                                                      */
-/* ---------------------------------------------------------------- */
-.modal {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: rgba(0, 0, 0, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-.modal[hidden] { display: none; }
-.modal-panel {
-  width: 100%;
-  max-width: 720px;
-  background: var(--surface);
-  border-radius: var(--radius);
-  padding: 16px;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.modal-head { display: flex; align-items: center; justify-content: space-between; }
-.modal-head h2 { margin: 0; font-size: 1.1rem; }
-.webcam-stage {
-  position: relative;
-  background: #000;
-  border-radius: 12px;
-  overflow: hidden;
-  aspect-ratio: 4 / 3;
-}
-#webcamVideo { width: 100%; height: 100%; object-fit: cover; display: block; }
-.webcam-guide {
-  position: absolute;
-  inset: 12%;
-  border: 2px dashed rgba(255,255,255,0.75);
-  border-radius: 12px;
-  pointer-events: none;
-}
-
-/* ---------------------------------------------------------------- */
-/* Result: rejected / quality-gate failure                           */
-/* ---------------------------------------------------------------- */
-.reject-icon { font-size: 2.5rem; text-align: center; }
-#rejectedView h2, #notConfiguredCard h2 { text-align: center; margin: 6px 0; }
-.reject-reason {
-  text-align: center;
-  font-size: 1.05rem;
-  color: var(--grey-900);
-  font-weight: 600;
-}
-.reject-score-label { text-align: center; color: var(--grey-700); font-size: 0.9rem; }
-
-/* ---------------------------------------------------------------- */
-/* Verdict banner -- the one-line answer, above the detail            */
+/* Verdict card                                                      */
 /* ---------------------------------------------------------------- */
 .verdict-banner {
   display: flex;
@@ -465,7 +427,6 @@ video:focus-visible {
   gap: 12px;
   padding: 14px 16px;
   border-radius: 12px;
-  margin-bottom: 16px;
   font-weight: 700;
   border: 1px solid transparent;
 }
@@ -477,61 +438,44 @@ video:focus-visible {
 .verdict-banner.uncertain { background: var(--amber-100); color: var(--amber-700); border-color: var(--amber-700); }
 .verdict-banner.none { background: var(--grey-100); color: var(--grey-900); border-color: var(--grey-300); }
 
-/* ---------------------------------------------------------------- */
-/* Detections / tally                                                */
-/* ---------------------------------------------------------------- */
-.result-image-wrap { text-align: center; margin-bottom: 16px; }
-.result-image-wrap[hidden] { display: none; }
-#resultCanvas { max-width: 100%; max-height: 60vh; width: auto; height: auto; border-radius: 12px; box-shadow: var(--shadow); }
+.rejected { background: var(--amber-100); border: 1px solid var(--amber-700); border-radius: 12px; padding: 12px 14px; }
+.rejected[hidden] { display: none; }
+.reject-title { margin: 0 0 4px; font-weight: 800; color: var(--amber-700); }
+.reject-reason { margin: 0 0 6px; font-weight: 600; }
+.reject-score-label { margin: 0; color: var(--grey-700); font-size: 0.85rem; }
+.reject-icon { font-size: 2.5rem; text-align: center; }
+#notConfiguredCard h2 { text-align: center; margin: 6px 0; }
 
-.section-heading { font-size: 0.85rem; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--grey-700); }
-
+/* ---------------------------------------------------------------- */
+/* Detections                                                        */
+/* ---------------------------------------------------------------- */
+.section-heading { font-size: 0.78rem; margin: 4px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--grey-500); }
 .tally { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.tally-chip {
-  background: var(--grey-100);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 0.85rem;
-  font-weight: 700;
-}
+.tally-chip { background: var(--grey-100); border-radius: 999px; padding: 6px 12px; font-size: 0.85rem; font-weight: 700; }
 .tally-chip.pest { background: var(--red-100); color: var(--red-700); }
 .tally-chip.beneficial { background: var(--green-100); color: var(--green-700); }
 .tally-chip.neutral { background: var(--grey-100); color: var(--grey-700); }
 
-/* "No known insect recognised" -- deliberately colourless: no red/green
-   status language, no confidence bar. See noSpecimenBlock() in app.js. */
 .no-specimen {
   text-align: center;
-  padding: 22px 12px;
+  padding: 18px 12px;
   border: 1px dashed var(--grey-300);
   border-radius: 12px;
   color: var(--grey-700);
   background: var(--surface-2);
 }
-.no-specimen-icon { font-size: 2rem; margin-bottom: 4px; }
-.no-specimen h3 { margin: 4px 0 6px; color: var(--grey-900); font-size: 1.05rem; }
-.no-specimen p { margin: 0 0 6px; font-size: 0.92rem; }
+.no-specimen-icon { font-size: 1.8rem; margin-bottom: 4px; }
+.no-specimen h3 { margin: 4px 0 6px; color: var(--grey-900); font-size: 1rem; }
+.no-specimen p { margin: 0 0 6px; font-size: 0.9rem; }
 .no-specimen-row { border-style: dashed; color: var(--grey-700); }
 .status-tag.none { background: var(--grey-100); color: var(--grey-500); }
 
 .detection-list { display: flex; flex-direction: column; gap: 10px; }
-
-.detection-row {
-  border: 1px solid var(--grey-300);
-  border-radius: 12px;
-  padding: 12px 14px;
-  background: var(--surface-2);
-}
-.detection-row-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.detection-name { font-weight: 800; text-transform: capitalize; font-size: 1.05rem; }
+.detection-row { border: 1px solid var(--grey-300); border-radius: 12px; padding: 12px 14px; background: var(--surface-2); }
+.detection-row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.detection-name { font-weight: 800; text-transform: capitalize; font-size: 1.02rem; }
 .status-tag {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   padding: 2px 7px;
@@ -541,61 +485,29 @@ video:focus-visible {
 .status-tag.pest { background: var(--red-100); color: var(--red-700); }
 .status-tag.beneficial { background: var(--green-100); color: var(--green-700); }
 .status-tag.neutral { background: var(--grey-100); color: var(--grey-700); }
+.flagged-tag { font-size: 0.7rem; font-weight: 700; color: var(--blue-700); background: var(--blue-100); padding: 2px 7px; border-radius: 999px; }
 
-.flagged-tag {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--blue-700);
-  background: var(--blue-100);
-  padding: 2px 7px;
-  border-radius: 999px;
-}
-
-/* Confidence bar with a visible tick at the confirmation threshold --
-   the threshold must be visually obvious, not just implied by colour. */
-.confidence-bar-wrap {
-  position: relative;
-  height: 10px;
-  background: var(--grey-100);
-  border-radius: 999px;
-  overflow: visible;
-}
-.confidence-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--green-600), var(--green-700));
-  transition: width 0.4s ease-out;
-}
+.confidence-bar-wrap { position: relative; height: 10px; background: var(--grey-100); border-radius: 999px; overflow: visible; }
+.confidence-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--green-600), var(--green-700)); transition: width 0.4s ease-out; }
 .confidence-bar-fill.below-threshold { background: var(--grey-500); }
-.confidence-threshold-tick {
-  position: absolute;
-  top: -3px;
-  bottom: -3px;
-  left: 75%; /* overridden inline from the server's confidence_threshold */
-  width: 2px;
-  background: var(--grey-900);
-}
-.confidence-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.78rem;
-  color: var(--grey-700);
-  margin-top: 4px;
-}
+.confidence-threshold-tick { position: absolute; top: -3px; bottom: -3px; left: 75%; width: 2px; background: var(--grey-900); }
+.confidence-label { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--grey-700); margin-top: 4px; }
+.runner-up-note { font-size: 0.78rem; color: var(--grey-500); font-style: italic; margin-top: 6px; }
 
-.runner-up-note {
-  font-size: 0.78rem;
-  color: var(--grey-500);
-  font-style: italic;
-  margin-top: 6px;
-}
+/* ---------------------------------------------------------------- */
+/* Species reference + facts                                         */
+/* ---------------------------------------------------------------- */
+.supported-groups { display: flex; flex-direction: column; gap: 12px; }
+.species-group-heading { font-size: 0.75rem; font-weight: 700; color: var(--grey-700); margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.species-chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.species-chip { font-size: 0.84rem; font-weight: 600; padding: 5px 11px; border-radius: 999px; text-transform: capitalize; border: 1px solid transparent; }
+.species-chip.pest { background: var(--red-100); color: var(--red-700); border-color: #f3c2c2; }
+.species-chip.beneficial { background: var(--green-100); color: var(--green-700); border-color: #bfe3c3; }
+.species-chip.neutral { background: var(--grey-100); color: var(--grey-700); border-color: var(--grey-300); }
 
-.latency-note {
-  text-align: center;
-  font-size: 0.78rem;
-  color: var(--grey-500);
-  margin-top: 14px;
-}
+.facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 0.9rem; }
+.facts dt { color: var(--grey-500); font-weight: 600; white-space: nowrap; }
+.facts dd { margin: 0; color: var(--grey-900); }
 
 .footer {
   max-width: var(--max-width);
@@ -605,13 +517,7 @@ video:focus-visible {
   font-size: 0.8rem;
   text-align: center;
 }
-
-code {
-  background: var(--grey-100);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 0.9em;
-}
+code { background: var(--grey-100); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation-duration: 0.01ms !important; }

@@ -14,172 +14,192 @@
   <div class="topbar-inner">
     <div class="brand-block">
       <span class="brand">🐛 InsectVision</span>
-      <span class="tagline">Point, shoot, identify — and know when it's not an insect at all.</span>
+      <span class="tagline">Insect identification that also knows when it is looking at something else.</span>
     </div>
-    <div class="badges">
-      <span id="modeBadge" class="mode-badge" hidden></span>
-      <span id="modelBadge" class="mode-badge model-badge" hidden title="Classifier validation macro-F1"></span>
+    <div class="topbar-right">
+      <ul class="legend" aria-label="Colour key">
+        <li><span class="swatch pest"></span>Pest</li>
+        <li><span class="swatch beneficial"></span>Beneficial</li>
+        <li><span class="swatch neutral"></span>Neutral</li>
+        <li><span class="swatch review"></span>Needs review</li>
+        <li><span class="swatch none"></span>Not an insect</li>
+      </ul>
+      <div class="badges">
+        <span id="modeBadge" class="mode-badge" hidden></span>
+        <span id="modelBadge" class="mode-badge model-badge" hidden title="Classifier validation macro-F1"></span>
+      </div>
     </div>
   </div>
 </header>
 
-<main class="container">
+<main class="dashboard">
 
-  <!-- ==================== WHAT CAN BE TESTED (full width, always open) ==================== -->
-  <section id="supportedCard" class="card span-all" hidden>
-    <div class="card-head">
-      <h2 class="card-title-sm">What can this identify? <span id="supportedCount" class="count-pill"></span></h2>
+  <!-- ============================== STAGE (left) ============================== -->
+  <section class="stage-col" aria-label="Scanner">
+
+    <div class="source-bar">
+      <div class="source-tabs" role="tablist">
+        <button type="button" id="tabUpload" class="tab is-active" role="tab" aria-selected="true">🖼️ Photo</button>
+        <button type="button" id="tabCamera" class="tab" role="tab" aria-selected="false" hidden>🎥 Live camera</button>
+      </div>
+      <span id="stageStatus" class="stage-status"><span class="dot"></span><span id="stageStatusText">Ready</span></span>
     </div>
-    <p class="card-subtitle">Trained to recognise these species. Any guess below
-      <span data-threshold-pct>75%</span> confidence is always flagged as uncertain, never presented
-      as certain.<span id="rejectNote" hidden> The model has also been trained to recognise when a
-      photo contains <strong>none</strong> of these — a tree, a leaf, a hand — and will say so
-      rather than guess a species.</span></p>
-    <div id="supportedGroups" class="supported-groups"></div>
-  </section>
 
-  <div class="workspace">
+    <div id="stage" class="stage" data-state="empty">
 
-    <!-- ============================== CAPTURE ============================== -->
-    <section id="captureCard" class="card col-scan">
-      <ol class="steps" aria-label="How it works">
-        <li class="step is-active" data-step="1"><span class="step-num">1</span>Photo</li>
-        <li class="step" data-step="2"><span class="step-num">2</span>Analyse</li>
-        <li class="step" data-step="3"><span class="step-num">3</span>Verdict</li>
-      </ol>
-
-      <h1 class="card-title">Scan a photo</h1>
-      <p class="card-subtitle">Get close so the insect fills most of the frame. Once you've picked a
-        photo, drag the box to zoom in even more if it's still small in the picture.</p>
-
-      <div id="dropzone" class="dropzone">
-        <div id="emptyState" class="empty-state">
-          <div class="empty-icon" aria-hidden="true">📷</div>
-          <p>Take a photo, use your webcam, or choose one from your gallery</p>
-          <div class="capture-buttons">
-            <button type="button" id="takePhotoBtn" class="btn btn-primary">📱 Take Photo</button>
-            <button type="button" id="webcamBtn" class="btn btn-primary" hidden>🎥 Use Webcam</button>
-            <button type="button" id="chooseFileBtn" class="btn btn-secondary">🖼️ Choose File</button>
-          </div>
-          <p class="dropzone-hint">or drag &amp; drop an image here</p>
+      <!-- empty: pick a photo -->
+      <div id="stageEmpty" class="stage-panel stage-empty" data-dropzone>
+        <div class="empty-icon" aria-hidden="true">📷</div>
+        <h1 class="stage-title">Scan an insect</h1>
+        <p class="stage-text">Choose a photo, drop one here, or switch to the live camera. Get close so the
+          insect fills most of the frame.</p>
+        <div class="capture-buttons">
+          <button type="button" id="takePhotoBtn" class="btn btn-light">📱 Take photo</button>
+          <button type="button" id="chooseFileBtn" class="btn btn-light">🖼️ Choose file</button>
         </div>
+      </div>
 
-        <div id="previewState" class="preview-state" hidden>
-          <div id="cropContainer" class="crop-container">
-            <img id="previewImg" alt="Selected photo preview">
-            <div id="cropBox" class="crop-box">
-              <div class="crop-handle" data-handle="nw"></div>
-              <div class="crop-handle" data-handle="ne"></div>
-              <div class="crop-handle" data-handle="sw"></div>
-              <div class="crop-handle" data-handle="se"></div>
-            </div>
-          </div>
-          <p class="crop-hint">If the insect looks small, drag the box tighter around it (or tap
-            "Zoom to center") before analysing.</p>
-          <div class="preview-actions">
-            <button type="button" id="zoomCenterBtn" class="btn btn-secondary btn-small">🔍 Zoom to center</button>
-            <button type="button" id="resetCropBtn" class="btn btn-secondary btn-small">⬜ Use full photo</button>
-            <button type="button" id="replaceBtn" class="btn btn-secondary btn-small">🔄 Replace photo</button>
+      <!-- preview: chosen photo with crop tool -->
+      <div id="stagePreview" class="stage-panel stage-preview" hidden>
+        <div id="cropContainer" class="crop-container">
+          <img id="previewImg" alt="Selected photo preview">
+          <div id="cropBox" class="crop-box">
+            <div class="crop-handle" data-handle="nw"></div>
+            <div class="crop-handle" data-handle="ne"></div>
+            <div class="crop-handle" data-handle="sw"></div>
+            <div class="crop-handle" data-handle="se"></div>
           </div>
         </div>
       </div>
 
-      <!-- capture="environment" opens the rear camera directly on phones -->
-      <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
-      <input type="file" id="galleryInput" accept="image/*" hidden>
+      <!-- camera: live video -->
+      <div id="stageCamera" class="stage-panel stage-camera" hidden>
+        <video id="webcamVideo" autoplay playsinline muted></video>
+        <div id="webcamGuide" class="webcam-guide" aria-hidden="true" hidden></div>
+        <div id="webcamOff" class="camera-off">
+          <div class="empty-icon" aria-hidden="true">🎥</div>
+          <h2 class="stage-title">Camera is off</h2>
+          <p class="stage-text">Press <strong>Start camera</strong> and allow access when your browser asks.
+            Nothing is recorded; a single frame is sent only when you press Capture.</p>
+        </div>
+      </div>
 
-      <p id="fileError" class="field-error" role="alert" hidden></p>
+      <!-- result: analysed image with boxes -->
+      <div id="stageResult" class="stage-panel stage-result" hidden>
+        <div id="resultImageWrap" class="result-image-wrap" hidden>
+          <canvas id="resultCanvas"></canvas>
+        </div>
+        <img id="resultImg" alt="Analysed photo" hidden>
+      </div>
+    </div>
 
-      <button type="button" id="analyseBtn" class="btn btn-primary btn-large" disabled>
+    <!-- instrument strip under the stage -->
+    <div class="stage-strip" aria-live="polite">
+      <span>Detections <b id="statDetections">0</b></span>
+      <span class="sep">|</span>
+      <span>Confirmed <b id="statConfirmed">0</b></span>
+      <span class="sep">|</span>
+      <span>Needs review <b id="statReview">0</b></span>
+      <span class="sep">|</span>
+      <span>Not an insect <b id="statNone">0</b></span>
+      <span class="sep">|</span>
+      <span>Quality <b id="statQuality">n/a</b></span>
+      <span class="strip-right" id="latencyWrap" hidden>Analysed in <b id="latencyMs"></b></span>
+    </div>
+
+    <!-- tools change with the stage state -->
+    <div class="stage-toolbar">
+      <div id="toolsPreview" class="tool-group" hidden>
+        <button type="button" id="zoomCenterBtn" class="btn btn-secondary btn-small">🔍 Zoom to centre</button>
+        <button type="button" id="resetCropBtn" class="btn btn-secondary btn-small">⬜ Use full photo</button>
+        <button type="button" id="replaceBtn" class="btn btn-secondary btn-small">🔄 Replace photo</button>
+      </div>
+      <div id="toolsCamera" class="tool-group" hidden>
+        <button type="button" id="webcamStartBtn" class="btn btn-primary">▶ Start camera</button>
+        <button type="button" id="webcamCaptureBtn" class="btn btn-primary" disabled>📸 Capture</button>
+        <button type="button" id="webcamSwitchBtn" class="btn btn-secondary btn-small" hidden>🔁 Switch camera</button>
+        <button type="button" id="webcamStopBtn" class="btn btn-secondary btn-small" hidden>⏹ Stop</button>
+      </div>
+      <div id="toolsResult" class="tool-group" hidden>
+        <button type="button" id="reanalyseBtn" class="btn btn-secondary">✂️ Adjust crop</button>
+        <button type="button" id="scanAnotherBtn" class="btn btn-primary">🔄 Scan another</button>
+      </div>
+      <button type="button" id="analyseBtn" class="btn btn-primary btn-analyse" disabled hidden>
         <span id="analyseBtnText">Analyse photo</span>
         <span id="analyseSpinner" class="spinner" hidden aria-hidden="true"></span>
       </button>
+    </div>
 
-      <p id="submitError" class="field-error" role="alert" hidden></p>
-    </section>
+    <!-- hidden pickers: capture="environment" opens the rear camera on phones -->
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+    <input type="file" id="galleryInput" accept="image/*" hidden>
 
-    <!-- Desktop-only placeholder for the results column before a scan -->
-    <section id="resultPlaceholder" class="card col-result placeholder-card" aria-hidden="true">
-      <div class="placeholder-inner">
-        <div class="empty-icon" aria-hidden="true">🔬</div>
-        <h2>Results appear here</h2>
-        <p>Pick or capture a photo on the left and press <strong>Analyse photo</strong>. You'll get the
-          species, how confident the model is, whether it's a pest or beneficial — or a clear
-          "not an insect".</p>
-      </div>
-    </section>
+    <p id="fileError" class="field-error" role="alert" hidden></p>
+    <p id="webcamError" class="field-error" role="alert" hidden></p>
+    <p id="submitError" class="field-error" role="alert" hidden></p>
+    <p class="crop-hint" id="cropHint" hidden>Drag the box tighter around the insect if it looks small, or press Zoom to centre.</p>
+  </section>
 
-    <!-- ============================== RESULT ============================== -->
-    <section id="resultCard" class="card col-result" hidden>
+  <!-- ============================== SIDEBAR (right) ============================== -->
+  <aside class="side-col" aria-label="Results and reference">
 
-      <div id="rejectedView" hidden>
-        <div class="reject-icon" aria-hidden="true">⚠️</div>
-        <h2>Photo not usable</h2>
+    <section id="verdictCard" class="card">
+      <h2 class="card-heading">Verdict</h2>
+      <p id="verdictEmpty" class="muted">Nothing analysed yet. The answer will appear here.</p>
+      <div id="verdictBanner" class="verdict-banner" role="status" hidden></div>
+      <div id="rejectedView" class="rejected" hidden>
+        <p class="reject-title">⚠️ Photo not usable</p>
         <p id="rejectReason" class="reject-reason"></p>
-        <p class="reject-score-label">Quality score: <span id="rejectScore"></span> / 1.00 (needs ≥ 0.60)</p>
-        <button type="button" id="retakeBtn" class="btn btn-primary btn-large">Retake photo</button>
-      </div>
-
-      <div id="successView" hidden>
-        <div id="verdictBanner" class="verdict-banner" role="status" hidden></div>
-
-        <!-- cascade mode: per-species tally + detection list -->
-        <div id="cascadeResults" hidden>
-          <div id="resultImageWrap" class="result-image-wrap" hidden>
-            <canvas id="resultCanvas"></canvas>
-          </div>
-          <h3 class="section-heading">Detections</h3>
-          <div id="tally" class="tally"></div>
-          <div id="detectionList" class="detection-list"></div>
-        </div>
-
-        <!-- classifier-only mode: top-3 predictions -->
-        <div id="classifierResults" hidden>
-          <h3 id="topMatchesHeading" class="section-heading">Top matches</h3>
-          <div id="topPredictionsList" class="detection-list"></div>
-        </div>
-
-        <p class="latency-note">Analysed in <span id="latencyMs"></span></p>
-
-        <button type="button" id="scanAnotherBtn" class="btn btn-primary btn-large">Scan another</button>
+        <p class="reject-score-label">Quality score <span id="rejectScore"></span> / 1.00 (needs at least 0.60)</p>
       </div>
     </section>
 
-  </div><!-- /workspace -->
+    <section id="detectionsCard" class="card">
+      <h2 class="card-heading">Detections</h2>
+      <p id="detectionsEmpty" class="muted">Each insect the detector finds is listed here with its species, confidence and status.</p>
+      <div id="cascadeResults" hidden>
+        <div id="tally" class="tally"></div>
+        <div id="detectionList" class="detection-list"></div>
+      </div>
+      <div id="classifierResults" hidden>
+        <h3 id="topMatchesHeading" class="section-heading">Top matches</h3>
+        <div id="topPredictionsList" class="detection-list"></div>
+      </div>
+    </section>
+
+    <section id="supportedCard" class="card" hidden>
+      <h2 class="card-heading">What it can identify <span id="supportedCount" class="count-pill"></span></h2>
+      <p class="card-subtitle">Any guess below <span data-threshold-pct>75%</span> confidence is marked as needing
+        review, never presented as certain.<span id="rejectNote" hidden> The model has also learned to recognise
+        when a photo contains none of these (a tree, a leaf, a hand) and says so instead of guessing.</span></p>
+      <div id="supportedGroups" class="supported-groups"></div>
+    </section>
+
+    <section id="aboutCard" class="card">
+      <h2 class="card-heading">About this model</h2>
+      <dl class="facts">
+        <dt>Pipeline</dt><dd>YOLOv8 finds each insect, then EfficientNet-B0 names it.</dd>
+        <dt>Classes</dt><dd id="factClasses">12 species plus a "not an insect" class</dd>
+        <dt>Confirmation rule</dt><dd>At least <span data-threshold-pct>75%</span> confidence, otherwise marked for review.</dd>
+        <dt>Classifier F1</dt><dd id="factF1">not recorded</dd>
+        <dt>Detector mAP@0.5</dt><dd id="factMap">not recorded</dd>
+        <dt>Runs on</dt><dd>The server, with ONNX Runtime. Photos are analysed and not stored.</dd>
+      </dl>
+    </section>
+  </aside>
 
   <section id="notConfiguredCard" class="card span-all" hidden>
     <div class="reject-icon" aria-hidden="true">🧪</div>
     <h2>No trained model yet</h2>
-    <p>The classifier hasn't been trained and deployed yet, so scans can't run. See
+    <p>The classifier has not been trained and deployed yet, so scans cannot run. See
       <code>notebooks/train_cascade_colab.ipynb</code>.</p>
   </section>
 
 </main>
 
-<!-- ============================== WEBCAM ============================== -->
-<div id="webcamModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="webcamTitle" hidden>
-  <div class="modal-panel">
-    <div class="modal-head">
-      <h2 id="webcamTitle">Webcam</h2>
-      <button type="button" id="webcamCancelBtn" class="btn btn-secondary btn-small" aria-label="Close webcam">✕ Close</button>
-    </div>
-    <div class="webcam-stage">
-      <video id="webcamVideo" autoplay playsinline muted></video>
-      <div class="webcam-guide" aria-hidden="true"></div>
-    </div>
-    <p id="webcamError" class="field-error" role="alert" hidden></p>
-    <p class="crop-hint">Hold the insect inside the frame, keep still, then capture.</p>
-    <div class="preview-actions">
-      <button type="button" id="webcamCaptureBtn" class="btn btn-primary" disabled>📸 Capture</button>
-      <button type="button" id="webcamSwitchBtn" class="btn btn-secondary" hidden>🔁 Switch camera</button>
-    </div>
-  </div>
-</div>
-
 <footer class="footer">
-  <p>InsectVision identifies insect species from a photo. It is not infallible, and any
-    identification below <span data-threshold-pct>75%</span> confidence is always flagged as
-    uncertain rather than presented as fact.</p>
+  <p>InsectVision identifies insect species from a photo. It is not infallible. Any identification below
+    <span data-threshold-pct>75%</span> confidence is marked as needing review rather than presented as fact.</p>
 </footer>
 
 <script src="/static/app.js"></script>
