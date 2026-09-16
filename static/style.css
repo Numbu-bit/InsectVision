@@ -3,7 +3,17 @@
    reading this on a mid-range phone screen in direct daylight, not a
    developer on a calibrated monitor -- pastel colour-only distinctions
    would be unreadable outdoors, so every status also carries a text label
-   and/or icon, never colour alone. Dark mode follows the OS setting. */
+   and/or icon, never colour alone.
+
+   Theme is deliberately locked to LIGHT (white cards, green header): it is the
+   interface presented in phases 1 and 2 and must stay recognisable. No
+   prefers-color-scheme override.
+
+   Layout scales with the device:
+     phone   (< 640px)   single column, everything full width
+     tablet  (640-1023)  single wider column
+     desktop (>= 1024)   species strip across the top, then a two-column
+                         workspace: scanner on the left, results on the right */
 
 :root {
   --green-800: #124a17;
@@ -28,31 +38,11 @@
   --shadow: 0 1px 2px rgba(20, 40, 20, 0.06), 0 8px 24px -12px rgba(20, 40, 20, 0.25);
 
   --radius: 16px;
-  --gap: 16px;
-  --max-width: 680px;
+  --gap: 20px;
+  --max-width: 1240px;      /* desktop workspace */
+  --max-width-narrow: 720px; /* tablet single column */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --green-100: #1d3a21;
-    --amber-100: #3d2a12;
-    --red-100: #3d1a1a;
-    --blue-100: #16294a;
-    --grey-900: #f1f1ec;
-    --grey-700: #c9c9c2;
-    --grey-500: #9a9a93;
-    --grey-300: #4a4d47;
-    --grey-100: #2a2d28;
-    --surface: #1e211d;
-    --surface-2: #262a25;
-    --page-bg: #141613;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
-    --green-700: #43a047;
-    --red-700: #ef5350;
-    --blue-700: #64b5f6;
-    --amber-700: #ffb74d;
-  }
-}
 
 * { box-sizing: border-box; }
 
@@ -62,8 +52,12 @@ html, body {
   background: var(--page-bg);
   color: var(--grey-900);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 17px;
+  /* Fluid base size: 16px on a phone up to 18px on a wide desktop, so the
+     UI reads at a natural size on both instead of looking like a phone
+     page blown up on a laptop. */
+  font-size: clamp(16px, 0.95rem + 0.25vw, 18px);
   line-height: 1.5;
+  min-height: 100vh;
 }
 
 /* Every interactive control gets a visible focus ring -- required for
@@ -91,7 +85,7 @@ video:focus-visible {
 .topbar-inner {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 12px 16px;
+  padding: 14px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -110,15 +104,63 @@ video:focus-visible {
   white-space: nowrap;
 }
 .model-badge { background: rgba(255,255,255,0.28); }
-@media (max-width: 480px) {
+.brand { white-space: nowrap; }
+@media (max-width: 520px) {
+  /* Badges drop to their own row so the brand never wraps mid-word */
+  .topbar-inner { flex-wrap: wrap; gap: 6px 12px; padding: 10px 16px; }
+  .brand-block { flex: 1 1 100%; }
   .tagline { display: none; }
+  .brand { font-size: 1.1rem; }
+  .badges { flex-wrap: wrap; }
 }
 
 .container {
-  max-width: var(--max-width);
+  max-width: var(--max-width-narrow);
   margin: 0 auto;
   padding: 16px;
   padding-bottom: 48px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Responsive workspace                                              */
+/* ---------------------------------------------------------------- */
+.workspace { display: block; }
+.placeholder-card { display: none; }          /* desktop only, see below */
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: var(--max-width);
+    padding: 24px 28px 64px;
+  }
+  .workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: var(--gap);
+    align-items: start;
+  }
+  .col-scan { grid-column: 1; }
+  .col-result { grid-column: 2; }
+  /* The results column always has something in it: the live result, or
+     the placeholder explaining what will appear. JS toggles which. */
+  .placeholder-card:not([hidden]) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 420px;
+    border-style: dashed;
+    background: var(--surface-2);
+    box-shadow: none;
+  }
+  .placeholder-inner { text-align: center; max-width: 380px; color: var(--grey-700); }
+  .placeholder-inner h2 { margin: 6px 0 8px; color: var(--grey-900); font-size: 1.2rem; }
+  .placeholder-inner p { margin: 0; font-size: 0.95rem; }
+  #previewImg { max-height: 62vh; }
+  .card { padding: 26px 28px; }
+  .card-title { font-size: 1.6rem; }
+}
+
+@media (min-width: 1400px) {
+  :root { --max-width: 1360px; }
 }
 
 .card {
@@ -172,16 +214,14 @@ video:focus-visible {
 /* ---------------------------------------------------------------- */
 /* Supported-species reference list                                  */
 /* ---------------------------------------------------------------- */
-.supported-details summary { list-style: none; display: flex; align-items: center; gap: 8px; }
-.supported-details summary::-webkit-details-marker { display: none; }
-.supported-details summary::after {
-  content: "▾";
-  margin-left: auto;
-  color: var(--grey-500);
-  transition: transform 0.15s;
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.card-title-sm { cursor: default; display: flex; align-items: center; gap: 8px; }
+.supported-groups { display: flex; flex-direction: column; gap: 12px; }
+@media (min-width: 760px) {
+  /* Pests / beneficial / neutral side by side instead of stacked */
+  .supported-groups { flex-direction: row; flex-wrap: wrap; gap: 12px 32px; }
+  .species-group { margin-bottom: 0; }
 }
-.supported-details[open] summary::after { transform: rotate(180deg); }
-.supported-details[open] summary { margin-bottom: 8px; }
 .count-pill {
   font-size: 0.75rem;
   font-weight: 700;
@@ -202,15 +242,16 @@ video:focus-visible {
 }
 .species-chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .species-chip {
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   font-weight: 600;
-  padding: 6px 12px;
+  padding: 6px 13px;
   border-radius: 999px;
   text-transform: capitalize;
+  border: 1px solid transparent;
 }
-.species-chip.pest { background: var(--red-100); color: var(--red-700); }
-.species-chip.beneficial { background: var(--green-100); color: var(--green-700); }
-.species-chip.neutral { background: var(--grey-100); color: var(--grey-700); }
+.species-chip.pest { background: var(--red-100); color: var(--red-700); border-color: #f3c2c2; }
+.species-chip.beneficial { background: var(--green-100); color: var(--green-700); border-color: #bfe3c3; }
+.species-chip.neutral { background: var(--grey-100); color: var(--grey-700); border-color: var(--grey-300); }
 
 /* ---------------------------------------------------------------- */
 /* Capture / dropzone                                                */
@@ -238,6 +279,15 @@ video:focus-visible {
   justify-content: center;
   flex-wrap: wrap;
 }
+@media (max-width: 480px) {
+  /* Three full-width stacked buttons are easier to hit than a cramped row */
+  .capture-buttons { flex-direction: column; align-items: stretch; }
+  .capture-buttons .btn { width: 100%; }
+}
+@media (min-width: 1024px) {
+  .dropzone { padding: 44px 24px; }
+  .empty-icon { font-size: 3rem; }
+}
 .dropzone-hint {
   margin: 14px 0 0 !important;
   font-size: 0.82rem;
@@ -262,6 +312,12 @@ video:focus-visible {
   display: inline-block;
   line-height: 0;
   touch-action: none;
+  /* Clip the crop box's darkening overlay to the photo itself. Without
+     this the 9999px box-shadow spread dims the ENTIRE page -- fine as a
+     "focus" effect on a phone, but on desktop it greyed out the results
+     column and the species list sitting next to the photo. */
+  overflow: hidden;
+  border-radius: 10px;
 }
 .crop-box {
   position: absolute;
@@ -271,18 +327,20 @@ video:focus-visible {
   border-radius: 4px;
 }
 .crop-box[hidden] { display: none; }
+/* Handles sit INSIDE the box corners (the container now clips overflow),
+   sized for fingers: 26px visual, and the whole corner is the hit target. */
 .crop-handle {
   position: absolute;
-  width: 22px; height: 22px;
+  width: 26px; height: 26px;
   background: white;
-  border: 2px solid var(--green-600);
+  border: 3px solid var(--green-600);
   border-radius: 50%;
-  margin: -10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
 }
-.crop-handle[data-handle="nw"] { top: 0; left: 0; cursor: nwse-resize; }
-.crop-handle[data-handle="ne"] { top: 0; right: 0; margin-right: -10px; cursor: nesw-resize; }
-.crop-handle[data-handle="sw"] { bottom: 0; left: 0; margin-bottom: -10px; cursor: nesw-resize; }
-.crop-handle[data-handle="se"] { bottom: 0; right: 0; margin-bottom: -10px; margin-right: -10px; cursor: nwse-resize; }
+.crop-handle[data-handle="nw"] { top: 2px; left: 2px; cursor: nwse-resize; }
+.crop-handle[data-handle="ne"] { top: 2px; right: 2px; cursor: nesw-resize; }
+.crop-handle[data-handle="sw"] { bottom: 2px; left: 2px; cursor: nesw-resize; }
+.crop-handle[data-handle="se"] { bottom: 2px; right: 2px; cursor: nwse-resize; }
 
 .crop-hint { margin: 0; font-size: 0.82rem; color: var(--grey-500); text-align: center; }
 .preview-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
@@ -424,7 +482,7 @@ video:focus-visible {
 /* ---------------------------------------------------------------- */
 .result-image-wrap { text-align: center; margin-bottom: 16px; }
 .result-image-wrap[hidden] { display: none; }
-#resultCanvas { max-width: 100%; height: auto; border-radius: 12px; box-shadow: var(--shadow); }
+#resultCanvas { max-width: 100%; max-height: 60vh; width: auto; height: auto; border-radius: 12px; box-shadow: var(--shadow); }
 
 .section-heading { font-size: 0.85rem; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--grey-700); }
 

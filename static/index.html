@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="light">
 <meta name="theme-color" content="#1b5e20">
 <title>InsectVision</title>
 <link rel="stylesheet" href="/static/style.css">
@@ -14,7 +14,7 @@
   <div class="topbar-inner">
     <div class="brand-block">
       <span class="brand">🐛 InsectVision</span>
-      <span class="tagline">Point, shoot, identify -- and know when it's not an insect at all.</span>
+      <span class="tagline">Point, shoot, identify — and know when it's not an insect at all.</span>
     </div>
     <div class="badges">
       <span id="modeBadge" class="mode-badge" hidden></span>
@@ -25,114 +25,129 @@
 
 <main class="container">
 
-  <!-- ============================== CAPTURE ============================== -->
-  <section id="captureCard" class="card">
-    <ol class="steps" aria-label="How it works">
-      <li class="step is-active" data-step="1"><span class="step-num">1</span>Photo</li>
-      <li class="step" data-step="2"><span class="step-num">2</span>Analyse</li>
-      <li class="step" data-step="3"><span class="step-num">3</span>Verdict</li>
-    </ol>
+  <!-- ==================== WHAT CAN BE TESTED (full width, always open) ==================== -->
+  <section id="supportedCard" class="card span-all" hidden>
+    <div class="card-head">
+      <h2 class="card-title-sm">What can this identify? <span id="supportedCount" class="count-pill"></span></h2>
+    </div>
+    <p class="card-subtitle">Trained to recognise these species. Any guess below
+      <span data-threshold-pct>75%</span> confidence is always flagged as uncertain, never presented
+      as certain.<span id="rejectNote" hidden> The model has also been trained to recognise when a
+      photo contains <strong>none</strong> of these — a tree, a leaf, a hand — and will say so
+      rather than guess a species.</span></p>
+    <div id="supportedGroups" class="supported-groups"></div>
+  </section>
 
-    <h1 class="card-title">Scan a photo</h1>
-    <p class="card-subtitle">Get close so the insect fills most of the frame. Once you've picked a
-      photo, drag the box to zoom in even more if it's still small in the picture.</p>
+  <div class="workspace">
 
-    <div id="dropzone" class="dropzone">
-      <div id="emptyState" class="empty-state">
-        <div class="empty-icon" aria-hidden="true">📷</div>
-        <p>Take a photo, use your webcam, or choose one from your gallery</p>
-        <div class="capture-buttons">
-          <button type="button" id="takePhotoBtn" class="btn btn-primary">📱 Take Photo</button>
-          <button type="button" id="webcamBtn" class="btn btn-primary" hidden>🎥 Use Webcam</button>
-          <button type="button" id="chooseFileBtn" class="btn btn-secondary">🖼️ Choose File</button>
+    <!-- ============================== CAPTURE ============================== -->
+    <section id="captureCard" class="card col-scan">
+      <ol class="steps" aria-label="How it works">
+        <li class="step is-active" data-step="1"><span class="step-num">1</span>Photo</li>
+        <li class="step" data-step="2"><span class="step-num">2</span>Analyse</li>
+        <li class="step" data-step="3"><span class="step-num">3</span>Verdict</li>
+      </ol>
+
+      <h1 class="card-title">Scan a photo</h1>
+      <p class="card-subtitle">Get close so the insect fills most of the frame. Once you've picked a
+        photo, drag the box to zoom in even more if it's still small in the picture.</p>
+
+      <div id="dropzone" class="dropzone">
+        <div id="emptyState" class="empty-state">
+          <div class="empty-icon" aria-hidden="true">📷</div>
+          <p>Take a photo, use your webcam, or choose one from your gallery</p>
+          <div class="capture-buttons">
+            <button type="button" id="takePhotoBtn" class="btn btn-primary">📱 Take Photo</button>
+            <button type="button" id="webcamBtn" class="btn btn-primary" hidden>🎥 Use Webcam</button>
+            <button type="button" id="chooseFileBtn" class="btn btn-secondary">🖼️ Choose File</button>
+          </div>
+          <p class="dropzone-hint">or drag &amp; drop an image here</p>
         </div>
-        <p class="dropzone-hint">or drag &amp; drop an image here</p>
-      </div>
 
-      <div id="previewState" class="preview-state" hidden>
-        <div id="cropContainer" class="crop-container">
-          <img id="previewImg" alt="Selected photo preview">
-          <div id="cropBox" class="crop-box">
-            <div class="crop-handle" data-handle="nw"></div>
-            <div class="crop-handle" data-handle="ne"></div>
-            <div class="crop-handle" data-handle="sw"></div>
-            <div class="crop-handle" data-handle="se"></div>
+        <div id="previewState" class="preview-state" hidden>
+          <div id="cropContainer" class="crop-container">
+            <img id="previewImg" alt="Selected photo preview">
+            <div id="cropBox" class="crop-box">
+              <div class="crop-handle" data-handle="nw"></div>
+              <div class="crop-handle" data-handle="ne"></div>
+              <div class="crop-handle" data-handle="sw"></div>
+              <div class="crop-handle" data-handle="se"></div>
+            </div>
+          </div>
+          <p class="crop-hint">If the insect looks small, drag the box tighter around it (or tap
+            "Zoom to center") before analysing.</p>
+          <div class="preview-actions">
+            <button type="button" id="zoomCenterBtn" class="btn btn-secondary btn-small">🔍 Zoom to center</button>
+            <button type="button" id="resetCropBtn" class="btn btn-secondary btn-small">⬜ Use full photo</button>
+            <button type="button" id="replaceBtn" class="btn btn-secondary btn-small">🔄 Replace photo</button>
           </div>
         </div>
-        <p class="crop-hint">If the insect looks small, drag the box tighter around it (or tap
-          "Zoom to center") before analysing.</p>
-        <div class="preview-actions">
-          <button type="button" id="zoomCenterBtn" class="btn btn-secondary btn-small">🔍 Zoom to center</button>
-          <button type="button" id="resetCropBtn" class="btn btn-secondary btn-small">⬜ Use full photo</button>
-          <button type="button" id="replaceBtn" class="btn btn-secondary btn-small">🔄 Replace photo</button>
+      </div>
+
+      <!-- capture="environment" opens the rear camera directly on phones -->
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+      <input type="file" id="galleryInput" accept="image/*" hidden>
+
+      <p id="fileError" class="field-error" role="alert" hidden></p>
+
+      <button type="button" id="analyseBtn" class="btn btn-primary btn-large" disabled>
+        <span id="analyseBtnText">Analyse photo</span>
+        <span id="analyseSpinner" class="spinner" hidden aria-hidden="true"></span>
+      </button>
+
+      <p id="submitError" class="field-error" role="alert" hidden></p>
+    </section>
+
+    <!-- Desktop-only placeholder for the results column before a scan -->
+    <section id="resultPlaceholder" class="card col-result placeholder-card" aria-hidden="true">
+      <div class="placeholder-inner">
+        <div class="empty-icon" aria-hidden="true">🔬</div>
+        <h2>Results appear here</h2>
+        <p>Pick or capture a photo on the left and press <strong>Analyse photo</strong>. You'll get the
+          species, how confident the model is, whether it's a pest or beneficial — or a clear
+          "not an insect".</p>
+      </div>
+    </section>
+
+    <!-- ============================== RESULT ============================== -->
+    <section id="resultCard" class="card col-result" hidden>
+
+      <div id="rejectedView" hidden>
+        <div class="reject-icon" aria-hidden="true">⚠️</div>
+        <h2>Photo not usable</h2>
+        <p id="rejectReason" class="reject-reason"></p>
+        <p class="reject-score-label">Quality score: <span id="rejectScore"></span> / 1.00 (needs ≥ 0.60)</p>
+        <button type="button" id="retakeBtn" class="btn btn-primary btn-large">Retake photo</button>
+      </div>
+
+      <div id="successView" hidden>
+        <div id="verdictBanner" class="verdict-banner" role="status" hidden></div>
+
+        <!-- cascade mode: per-species tally + detection list -->
+        <div id="cascadeResults" hidden>
+          <div id="resultImageWrap" class="result-image-wrap" hidden>
+            <canvas id="resultCanvas"></canvas>
+          </div>
+          <h3 class="section-heading">Detections</h3>
+          <div id="tally" class="tally"></div>
+          <div id="detectionList" class="detection-list"></div>
         </div>
-      </div>
-    </div>
 
-    <!-- capture="environment" opens the rear camera directly on phones -->
-    <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
-    <input type="file" id="galleryInput" accept="image/*" hidden>
-
-    <p id="fileError" class="field-error" role="alert" hidden></p>
-
-    <button type="button" id="analyseBtn" class="btn btn-primary btn-large" disabled>
-      <span id="analyseBtnText">Analyse photo</span>
-      <span id="analyseSpinner" class="spinner" hidden aria-hidden="true"></span>
-    </button>
-
-    <p id="submitError" class="field-error" role="alert" hidden></p>
-  </section>
-
-  <!-- ============================== RESULT ============================== -->
-  <section id="resultCard" class="card" hidden>
-
-    <div id="rejectedView" hidden>
-      <div class="reject-icon" aria-hidden="true">⚠️</div>
-      <h2>Photo not usable</h2>
-      <p id="rejectReason" class="reject-reason"></p>
-      <p class="reject-score-label">Quality score: <span id="rejectScore"></span> / 1.00 (needs ≥ 0.60)</p>
-      <button type="button" id="retakeBtn" class="btn btn-primary btn-large">Retake photo</button>
-    </div>
-
-    <div id="successView" hidden>
-      <div id="verdictBanner" class="verdict-banner" role="status" hidden></div>
-
-      <!-- cascade mode: per-species tally + detection list -->
-      <div id="cascadeResults" hidden>
-        <div id="resultImageWrap" class="result-image-wrap" hidden>
-          <canvas id="resultCanvas"></canvas>
+        <!-- classifier-only mode: top-3 predictions -->
+        <div id="classifierResults" hidden>
+          <h3 id="topMatchesHeading" class="section-heading">Top matches</h3>
+          <div id="topPredictionsList" class="detection-list"></div>
         </div>
-        <h3 class="section-heading">Detections</h3>
-        <div id="tally" class="tally"></div>
-        <div id="detectionList" class="detection-list"></div>
+
+        <p class="latency-note">Analysed in <span id="latencyMs"></span></p>
+
+        <button type="button" id="scanAnotherBtn" class="btn btn-primary btn-large">Scan another</button>
       </div>
+    </section>
 
-      <!-- classifier-only mode: top-3 predictions -->
-      <div id="classifierResults" hidden>
-        <h3 id="topMatchesHeading" class="section-heading">Top matches</h3>
-        <div id="topPredictionsList" class="detection-list"></div>
-      </div>
+  </div><!-- /workspace -->
 
-      <p class="latency-note">Analysed in <span id="latencyMs"></span></p>
-
-      <button type="button" id="scanAnotherBtn" class="btn btn-primary btn-large">Scan another</button>
-    </div>
-  </section>
-
-  <!-- ==================== WHAT CAN BE TESTED ==================== -->
-  <section id="supportedCard" class="card" hidden>
-    <details class="supported-details">
-      <summary class="card-title-sm">What can this identify? <span id="supportedCount" class="count-pill"></span></summary>
-      <p class="card-subtitle">Trained to recognise these species. Any guess below
-        <span data-threshold-pct>75%</span> confidence is always flagged as uncertain, never presented
-        as certain.<span id="rejectNote" hidden> The model has also been trained to recognise when a
-        photo contains <strong>none</strong> of these -- a tree, a leaf, a hand -- and will say so
-        rather than guess a species.</span></p>
-      <div id="supportedGroups"></div>
-    </details>
-  </section>
-
-  <section id="notConfiguredCard" class="card" hidden>
+  <section id="notConfiguredCard" class="card span-all" hidden>
     <div class="reject-icon" aria-hidden="true">🧪</div>
     <h2>No trained model yet</h2>
     <p>The classifier hasn't been trained and deployed yet, so scans can't run. See

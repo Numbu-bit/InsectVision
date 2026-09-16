@@ -45,6 +45,12 @@ const MIN_CROP_DISPLAY_PX = 60;
 
 const el = (id) => document.getElementById(id);
 
+// Desktop (>= 1024px) shows the scanner and the result side by side; phones
+// and tablets swap between them. Mirrors the breakpoint in style.css.
+function isDesktop() {
+  return !!(window.matchMedia && window.matchMedia("(min-width: 1024px)").matches);
+}
+
 async function init() {
   try {
     const res = await fetch("/api/v1/health");
@@ -78,9 +84,16 @@ async function init() {
 
   if (health.mode === "not_configured") {
     el("captureCard").hidden = true;
+    el("resultPlaceholder").hidden = true;
     el("notConfiguredCard").hidden = false;
     return;
   }
+
+  // Crossing the desktop breakpoint while a result is on screen: re-apply
+  // the layout rule so the scanner (re)appears or hides accordingly.
+  window.addEventListener("resize", () => {
+    if (!el("resultCard").hidden) el("captureCard").hidden = !isDesktop();
+  });
 
   const badge = el("modeBadge");
   badge.hidden = false;
@@ -493,9 +506,10 @@ function hideFileError() {
 
 function showCaptureState() {
   el("resultCard").hidden = true;
+  el("resultPlaceholder").hidden = false;
   el("captureCard").hidden = false;
   resetCapture();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (!isDesktop()) window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 // ---------------------------------------------------------------- //
@@ -641,7 +655,10 @@ function renderSupportedSpecies() {
 // Render result
 // ---------------------------------------------------------------- //
 function renderResult(data) {
-  el("captureCard").hidden = true;
+  // Desktop keeps the scanner visible next to the result; smaller screens
+  // swap to the result and offer "Scan another" to come back.
+  el("captureCard").hidden = !isDesktop();
+  el("resultPlaceholder").hidden = true;
   el("resultCard").hidden = false;
 
   if (!data.quality.passed) {
@@ -649,7 +666,7 @@ function renderResult(data) {
     el("successView").hidden = true;
     el("rejectReason").textContent = data.quality.reason || "Image quality too low.";
     el("rejectScore").textContent = data.quality.score.toFixed(2);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollToResultOnSmallScreens();
     return;
   }
 
@@ -670,7 +687,17 @@ function renderResult(data) {
     renderClassifierOnly(data);
   }
 
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  scrollToResultOnSmallScreens();
+}
+
+/** On phones/tablets the species list sits above the result, so scrolling
+ * to the top would hide the verdict below the fold -- scroll to the result
+ * card itself. Desktop shows the result beside the scanner; no scroll. */
+function scrollToResultOnSmallScreens() {
+  if (isDesktop()) return;
+  const card = el("resultCard");
+  if (card.scrollIntoView) card.scrollIntoView({ behavior: "smooth", block: "start" });
+  else window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 /** The one-line answer above the details. Three states only, matching
