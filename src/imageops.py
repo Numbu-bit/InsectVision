@@ -17,9 +17,33 @@ from PIL import Image, ImageOps
 # the same variance-of-Laplacian idea OpenCV's cv2.Laplacian().var() uses.
 # Revisit once real field photos are available in Step 2/3 -- this is a
 # starting point, not a measured threshold.
+#
+# The variance is measured on a copy downscaled to QUALITY_WORKING_SIDE, NOT
+# on the full-resolution upload, for two reasons that were both measured:
+#   1. Laplacian variance falls roughly with the square of resolution for the
+#      same content -- one sharp test photo scored 1035 at 256px, 452 at
+#      512px, and 1.7 at 4000px. Evaluated at native size, a perfectly sharp
+#      12 MP phone photo was rejected as "blurred" (score 0.52 < 0.60) while
+#      the same photo at 500px passed easily. The test images this threshold
+#      was calibrated on are all ~400-550px, so 512 keeps their scores where
+#      they were and makes a phone photo score like them instead of failing.
+#   2. Memory: float64 working arrays over a 12 MP image peaked at 384 MB in
+#      this function alone, on a serve tier with 512 MB total and two ONNX
+#      models already resident. At 512px the same arrays are ~2 MB.
+# Images already smaller than the working side are measured as-is (never
+# upscaled -- interpolating pixels in would fabricate smoothness).
 BLUR_VARIANCE_THRESHOLD = 100.0
+QUALITY_WORKING_SIDE = 512
 LUMINANCE_MIN = 40.0
 LUMINANCE_MAX = 215.0
+# Hard veto bounds. With the 0.5/0.3/0.2 blend below, luminance alone can
+# never fail a sharp image (worst case 0.5 + 0.0 + 0.2 = 0.70 > 0.60), so a
+# textured image at mean luminance 10/255 -- effectively black -- used to
+# pass, and the "too dark"/"over-exposed" messages were unreachable in
+# practice. These bounds are deliberately extreme (a mean of 15 is near
+# black; 240 is near white) so they only catch images no model could use.
+LUMINANCE_HARD_MIN = 15.0
+LUMINANCE_HARD_MAX = 240.0
 
 # Below this on the shorter side, even a perfect blur/luminance score can't
 # be trusted -- letterboxing something this small up to the model's working
@@ -77,6 +101,24 @@ def _laplacian_variance(gray: np.ndarray) -> float:
     return float(laplacian.var())
 
 
+def _quality_working_view(img: Image.Image) -> np.ndarray:
+    """Greyscale float32 copy at most QUALITY_WORKING_SIDE on the shorter
+    side. See the note above BLUR_VARIANCE_THRESHOLD for why the gate never
+    looks at full-resolution pixels."""
+    w, h = img.size
+    shorter = min(w, h)
+    gray = img.convert("L")
+    if shorter > QUALITY_WORKING_SIDE:
+        scale = QUALITY_WORKING_SIDE / shorter
+        # LANCZOS, not BILINEAR: measured on the calibration photos, a
+        # bilinear downscale roughly halved the Laplacian variance (it
+        # averages away exactly the fine texture being measured) while
+        # Lanczos stayed within ~10% of the native-resolution value, so the
+        # threshold keeps meaning what it was calibrated to mean.
+        gray = gray.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.LANCZOS)
+    return np.asarray(gray, dtype=np.float32)
+
+
 def assess_quality(img: Image.Image) -> QualityReport:
     """Score image usability in [0, 1] and explain any rejection.
 
@@ -95,9 +137,14 @@ def assess_quality(img: Image.Image) -> QualityReport:
             f"Image is only {w}x{h}px, too small to analyse reliably. "
             "Retake closer to the subject or at a higher camera resolution.")
 
-    gray = np.asarray(img.convert("L"), dtype=np.float64)
+    gray = _quality_working_view(img)
     blur_var = _laplacian_variance(gray)
     luminance = float(gray.mean())
+
+    if luminance < LUMINANCE_HARD_MIN:
+        return QualityReport(0.0, False, "Image is far too dark to analyse; find better light.")
+    if luminance > LUMINANCE_HARD_MAX:
+        return QualityReport(0.0, False, "Image is almost entirely washed out; avoid direct glare.")
 
     blur_score = min(blur_var / BLUR_VARIANCE_THRESHOLD, 1.0)
     resolution_score = min(shorter_side / RESOLUTION_TARGET, 1.0)
@@ -156,6 +203,16 @@ def unletterbox_box(box, scale: float, pad: tuple[int, int]) -> list[float]:
     x1, y1, x2, y2 = box
     return [(x1 - left) / scale, (y1 - top) / scale,
             (x2 - left) / scale, (y2 - top) / scale]
+
+
+def clamp_box(box, width: int, height: int) -> list[float]:
+    """Clip an (x1, y1, x2, y2) box to the image bounds, keeping x1<=x2 and
+    y1<=y2. Detector boxes near the frame edge routinely overshoot by a few
+    pixels; PIL's crop() would silently pad the overshoot with black."""
+    x1, y1, x2, y2 = box
+    x1, x2 = sorted((min(max(float(x1), 0.0), width), min(max(float(x2), 0.0), width)))
+    y1, y2 = sorted((min(max(float(y1), 0.0), height), min(max(float(y2), 0.0), height)))
+    return [x1, y1, x2, y2]
 
 
 def to_chw_float32(img: Image.Image) -> np.ndarray:

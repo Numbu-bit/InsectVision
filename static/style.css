@@ -1,15 +1,24 @@
 /* InsectVision -- plain CSS, no build step.
-   Mobile-first and high-contrast on purpose: the primary user is a farmer
-   reading this on a mid-range phone screen in direct daylight, not a
-   developer on a calibrated monitor -- pastel colour-only distinctions
-   would be unreadable outdoors, so every status also carries a text label
-   and/or icon, never colour alone. */
+
+   Layout: a "stage + sidebar" dashboard. The stage (left) is the one place
+   the photo, the live camera and the analysed result all appear, with an
+   instrument strip of counts under it; the sidebar (right) holds the
+   verdict, the detections, the species reference and the model facts.
+   On phones the two columns simply stack.
+
+   Theme is locked to LIGHT (white cards, green header): it is the interface
+   presented in phases 1 and 2. The stage itself is a dark frame, the way
+   any camera viewfinder or photo viewer is, so pictures read well on it.
+
+   High contrast on purpose: the primary user is reading this on a phone in
+   daylight. Every status carries a text label, never colour alone. */
 
 :root {
+  --green-800: #124a17;
   --green-700: #1b5e20;
   --green-600: #2e7d32;
   --green-100: #e8f5e9;
-  --amber-600: #e65100;
+  --amber-700: #b35c00;
   --amber-100: #fff3e0;
   --red-700: #b71c1c;
   --red-100: #ffebee;
@@ -21,12 +30,17 @@
   --grey-300: #d0d0d0;
   --grey-100: #f5f5f0;
   --surface: #ffffff;
-  --page-bg: #f0f1ec;
+  --surface-2: #f7f8f4;
+  --page-bg: #eef1ea;
+  --stage-bg: #172019;        /* deep green-charcoal viewfinder */
+  --stage-fg: #e6ede6;
   --focus-ring: #1565c0;
+  --shadow: 0 1px 2px rgba(20, 40, 20, 0.06), 0 8px 24px -12px rgba(20, 40, 20, 0.25);
 
-  --radius: 14px;
-  --gap: 16px;
-  --max-width: 640px;
+  --radius: 16px;
+  --gap: 20px;
+  --max-width: 1320px;
+  --side-width: 400px;
 }
 
 * { box-sizing: border-box; }
@@ -37,194 +51,349 @@ html, body {
   background: var(--page-bg);
   color: var(--grey-900);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 17px;
+  font-size: clamp(15px, 0.9rem + 0.25vw, 17px);
   line-height: 1.5;
+  min-height: 100vh;
 }
 
-/* Every interactive control gets a visible focus ring -- required for
-   keyboard accessibility, not optional polish. */
 button:focus-visible,
-select:focus-visible,
 input:focus-visible,
-summary:focus-visible {
+video:focus-visible {
   outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
+/* ---------------------------------------------------------------- */
+/* Header                                                            */
+/* ---------------------------------------------------------------- */
 .topbar {
-  background: var(--green-700);
+  background: linear-gradient(135deg, var(--green-800) 0%, var(--green-600) 100%);
   color: white;
   position: sticky;
   top: 0;
   z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
 }
 .topbar-inner {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 14px 16px;
+  padding: 12px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
-.brand { font-size: 1.15rem; font-weight: 700; }
+.brand-block { display: flex; flex-direction: column; min-width: 0; }
+.brand { font-size: 1.25rem; font-weight: 800; white-space: nowrap; }
+.tagline { font-size: 0.8rem; opacity: 0.88; }
+.topbar-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.badges { display: flex; gap: 6px; }
 .mode-badge {
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-weight: 700;
   background: rgba(255,255,255,0.18);
   padding: 4px 10px;
   border-radius: 999px;
+  white-space: nowrap;
+}
+.model-badge { background: rgba(255,255,255,0.28); }
+
+/* Colour key, like a map legend */
+.legend {
+  list-style: none;
+  display: flex;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  flex-wrap: wrap;
+}
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(255,255,255,0.14);
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.swatch.pest { background: #ff6b6b; }
+.swatch.beneficial { background: #7ddc8a; }
+.swatch.neutral { background: #cfd6cf; }
+.swatch.review { background: #6fa8ff; }
+.swatch.none { background: #9a9a93; outline: 1px dashed rgba(255,255,255,0.6); }
+
+@media (max-width: 720px) {
+  .tagline { display: none; }
+  .legend { display: none; }   /* the sidebar cards carry the same labels in full */
+  .topbar-inner { padding: 10px 16px; }
 }
 
-.container {
+/* ---------------------------------------------------------------- */
+/* Dashboard grid                                                    */
+/* ---------------------------------------------------------------- */
+.dashboard {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 16px;
-  padding-bottom: 48px;
+  padding: 20px 16px 48px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gap);
 }
+@media (min-width: 1024px) {
+  .dashboard {
+    padding: 24px 24px 64px;
+    grid-template-columns: minmax(0, 1fr) var(--side-width);
+    align-items: start;
+  }
+  .side-col { position: sticky; top: 84px; max-height: calc(100vh - 100px); overflow-y: auto; padding-right: 2px; }
+}
+@media (min-width: 1500px) {
+  :root { --max-width: 1480px; --side-width: 440px; }
+}
+.span-all { grid-column: 1 / -1; }
 
+/* When the page auto-scrolls to the verdict on a phone, leave room for the
+   sticky header instead of sliding the card underneath it. */
+#verdictCard { scroll-margin-top: 84px; }
+
+/* ---------------------------------------------------------------- */
+/* Cards                                                             */
+/* ---------------------------------------------------------------- */
 .card {
   background: var(--surface);
   border-radius: var(--radius);
-  padding: 20px;
-  margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  padding: 18px 20px;
+  margin-bottom: var(--gap);
+  box-shadow: var(--shadow);
+  border: 1px solid #e3e6df;
 }
-
-.card-title { margin: 0 0 4px; font-size: 1.4rem; }
-.card-title-sm { margin: 0 0 4px; font-size: 1.1rem; }
-.card-subtitle { margin: 0 0 16px; color: var(--grey-700); font-size: 0.95rem; }
-
-/* ---------------------------------------------------------------- */
-/* Supported-species reference list                                  */
-/* ---------------------------------------------------------------- */
-.species-group { margin-bottom: 14px; }
-.species-group:last-child { margin-bottom: 0; }
-.species-group-heading {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--grey-700);
-  margin: 0 0 8px;
+.side-col .card:last-child { margin-bottom: 0; }
+.card-heading {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.species-chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
-.species-chip {
-  font-size: 0.85rem;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 999px;
-  text-transform: capitalize;
-}
-.species-chip.pest { background: var(--red-100); color: var(--red-700); }
-.species-chip.beneficial { background: var(--green-100); color: var(--green-700); }
-.species-chip.neutral { background: var(--grey-100); color: var(--grey-700); }
-
-/* ---------------------------------------------------------------- */
-/* Capture / dropzone                                                */
-/* ---------------------------------------------------------------- */
-.dropzone {
-  border: 2px dashed var(--grey-300);
-  border-radius: var(--radius);
-  padding: 24px 16px;
-  text-align: center;
-  transition: border-color 0.15s, background 0.15s;
-}
-.dropzone.drag-over {
-  border-color: var(--green-600);
-  background: var(--green-100);
-}
-
-.empty-icon { font-size: 2.5rem; margin-bottom: 8px; }
-.empty-state p { margin: 0 0 16px; color: var(--grey-700); }
-
-.capture-buttons {
+  color: var(--grey-700);
   display: flex;
-  gap: 10px;
-  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+.card-subtitle { margin: 0 0 14px; color: var(--grey-700); font-size: 0.92rem; }
+.muted { margin: 0; color: var(--grey-500); font-size: 0.92rem; }
+.count-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--grey-100);
+  color: var(--grey-700);
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ---------------------------------------------------------------- */
+/* Stage column                                                      */
+/* ---------------------------------------------------------------- */
+.source-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
   flex-wrap: wrap;
 }
+.source-tabs { display: flex; gap: 6px; background: var(--surface); padding: 4px; border-radius: 12px; border: 1px solid #e3e6df; }
+.tab {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.92rem;
+  padding: 8px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: var(--grey-700);
+}
+.tab.is-active { background: var(--green-600); color: white; }
+.tab:not(.is-active):hover { background: var(--green-100); color: var(--green-700); }
 
-.dropzone-hint {
-  margin-top: 14px !important;
+.stage-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 0.85rem;
-  color: var(--grey-500);
+  font-weight: 600;
+  color: var(--grey-700);
+}
+.stage-status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--grey-300); }
+.stage-status.ok .dot { background: var(--green-600); }
+.stage-status.busy .dot { background: var(--amber-700); animation: pulse 1s ease-in-out infinite; }
+.stage-status.live .dot { background: #e53935; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+
+.stage {
+  position: relative;
+  background: var(--stage-bg);
+  color: var(--stage-fg);
+  border-radius: 14px 14px 0 0;
+  min-height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+@media (min-width: 1024px) { .stage { min-height: 520px; } }
+.stage-panel { width: 100%; display: flex; align-items: center; justify-content: center; }
+.stage-panel[hidden] { display: none; }
+
+/* empty state, on the dark frame */
+.stage-empty {
+  flex-direction: column;
+  text-align: center;
+  padding: 40px 24px;
+  border: 2px dashed rgba(255,255,255,0.22);
+  border-radius: 12px;
+  margin: 16px;
+  width: calc(100% - 32px);
+  min-height: 340px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.stage-empty.drag-over { border-color: #7ddc8a; background: rgba(125,220,138,0.08); }
+.empty-icon { font-size: 2.8rem; margin-bottom: 6px; }
+.stage-title { margin: 0 0 6px; font-size: 1.35rem; color: white; }
+.stage-text { margin: 0 0 18px; color: rgba(255,255,255,0.78); max-width: 460px; }
+.capture-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+@media (max-width: 480px) {
+  .capture-buttons { flex-direction: column; align-items: stretch; width: 100%; }
 }
 
-.preview-state { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-/* Same `display` vs `[hidden]` precedence issue as .spinner above (see the
-   comment there) -- without this, #previewState (which starts `hidden` in
-   the markup, with an empty <img> inside) would render from page load,
-   before any photo is ever picked. */
-.preview-state[hidden] { display: none; }
+/* preview (photo + crop tool) */
+.stage-preview { padding: 12px; }
 #previewImg {
   display: block;
   max-width: 100%;
-  max-height: 340px;
-  border-radius: 10px;
+  max-height: 68vh;
+  user-select: none;
+  -webkit-user-drag: none;
 }
-
-/* Crop/zoom tool: a draggable, resizable box over the preview so a user
-   can tighten framing around a small/distant insect after the fact --
-   the actual camera viewfinder (native OS camera app via capture=
-   "environment") isn't something a web page can overlay or control, so
-   this is the closest equivalent to "zoom in before analysing" achievable
-   in a browser. */
 .crop-container {
   position: relative;
   display: inline-block;
-  max-width: 100%;
-  touch-action: none; /* let pointer events handle drag without the page also scrolling */
+  line-height: 0;
+  touch-action: none;
+  overflow: hidden;        /* keeps the darkening overlay on the photo only */
+  border-radius: 8px;
 }
 .crop-box {
   position: absolute;
   border: 2px solid #ffffff;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
   cursor: move;
   border-radius: 4px;
 }
+.crop-box[hidden] { display: none; }
 .crop-handle {
   position: absolute;
-  width: 20px;
-  height: 20px;
-  margin: -10px;
+  width: 26px; height: 26px;
   background: white;
-  border: 2px solid var(--green-600);
+  border: 3px solid var(--green-600);
   border-radius: 50%;
-  touch-action: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
 }
-.crop-handle[data-handle="nw"] { top: 0; left: 0; cursor: nwse-resize; }
-.crop-handle[data-handle="ne"] { top: 0; right: 0; margin-right: -10px; cursor: nesw-resize; }
-.crop-handle[data-handle="sw"] { bottom: 0; left: 0; margin-bottom: -10px; cursor: nesw-resize; }
-.crop-handle[data-handle="se"] { bottom: 0; right: 0; margin-bottom: -10px; margin-right: -10px; cursor: nwse-resize; }
+.crop-handle[data-handle="nw"] { top: 2px; left: 2px; cursor: nwse-resize; }
+.crop-handle[data-handle="ne"] { top: 2px; right: 2px; cursor: nesw-resize; }
+.crop-handle[data-handle="sw"] { bottom: 2px; left: 2px; cursor: nesw-resize; }
+.crop-handle[data-handle="se"] { bottom: 2px; right: 2px; cursor: nwse-resize; }
+.crop-hint { margin: 8px 0 0; font-size: 0.82rem; color: var(--grey-500); text-align: center; }
 
-.crop-hint { margin: 0; font-size: 0.82rem; color: var(--grey-500); text-align: center; }
-.preview-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+/* camera */
+.stage-camera { position: relative; min-height: 380px; }
+@media (min-width: 1024px) { .stage-camera { min-height: 520px; } }
+#webcamVideo { width: 100%; max-height: 68vh; object-fit: contain; display: block; background: #000; }
+#webcamVideo:not([data-live]) { display: none; }
+.webcam-guide {
+  position: absolute;
+  inset: 12%;
+  border: 2px dashed rgba(255,255,255,0.7);
+  border-radius: 12px;
+  pointer-events: none;
+}
+.webcam-guide[hidden] { display: none; }
+.camera-off { text-align: center; padding: 40px 24px; }
+.camera-off[hidden] { display: none; }
+
+/* result */
+.stage-result { padding: 12px; }
+.result-image-wrap { text-align: center; line-height: 0; }
+.result-image-wrap[hidden] { display: none; }
+#resultCanvas, #resultImg { max-width: 100%; max-height: 68vh; width: auto; height: auto; border-radius: 8px; }
+
+/* instrument strip */
+.stage-strip {
+  background: #0f1511;
+  color: #cfd8cf;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.82rem;
+  padding: 10px 16px;
+  border-radius: 0 0 14px 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.stage-strip b { color: white; font-weight: 700; }
+.stage-strip .sep { color: #4a5a4c; }
+.strip-right { margin-left: auto; }
+.strip-right[hidden] { display: none; }
+
+/* toolbar */
+.stage-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.tool-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.tool-group[hidden] { display: none; }
+.btn-analyse { margin-left: auto; min-width: 200px; }
+.btn-analyse[hidden] { display: none; }
+@media (max-width: 640px) {
+  .stage-toolbar { flex-direction: column; align-items: stretch; }
+  .btn-analyse { margin-left: 0; width: 100%; }
+  .tool-group .btn { flex: 1; }
+}
 
 /* ---------------------------------------------------------------- */
-/* Buttons -- large tap targets, minimum 44px per accessibility norms */
+/* Buttons                                                           */
 /* ---------------------------------------------------------------- */
 .btn {
   min-height: 44px;
   padding: 10px 18px;
-  font-size: 1rem;
-  font-weight: 600;
-  border-radius: 10px;
+  font-size: 0.98rem;
+  font-weight: 700;
+  border-radius: 12px;
   border: 2px solid transparent;
   cursor: pointer;
   font-family: inherit;
-  transition: opacity 0.15s, transform 0.05s;
+  transition: opacity 0.15s, transform 0.05s, background 0.15s;
 }
 .btn:active { transform: scale(0.98); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.btn-primary { background: var(--green-600); color: white; }
+.btn-primary { background: var(--green-600); color: white; box-shadow: 0 2px 0 var(--green-800); }
 .btn-primary:hover:not(:disabled) { background: var(--green-700); }
-
 .btn-secondary { background: var(--surface); color: var(--green-700); border-color: var(--green-600); }
 .btn-secondary:hover:not(:disabled) { background: var(--green-100); }
-
-.btn-large { width: 100%; min-height: 52px; font-size: 1.05rem; margin-top: 18px; }
-.btn-small { min-height: 38px; font-size: 0.9rem; padding: 6px 14px; }
+.btn-light { background: white; color: var(--green-800); }
+.btn-light:hover:not(:disabled) { background: var(--green-100); }
+.btn-small { min-height: 38px; font-size: 0.88rem; padding: 6px 14px; }
 
 .spinner {
   display: inline-block;
@@ -236,86 +405,77 @@ summary:focus-visible {
   vertical-align: middle;
   animation: spin 0.7s linear infinite;
 }
-/* `.spinner { display: inline-block }` above otherwise wins over the
-   `hidden` attribute's UA-stylesheet `display: none` -- author rules that
-   set `display` on an element always beat the UA default regardless of
-   selector specificity or source order, so a plain `.spinner` rule alone
-   makes `hidden` a no-op on this element (and its `infinite` animation
-   keeps spinning even while "hidden"). This higher-specificity override
-   is what actually makes JS's `el("analyseSpinner").hidden = true` work. */
-.spinner[hidden] {
-  display: none;
-}
+.spinner[hidden] { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---------------------------------------------------------------- */
-/* Form fields                                                       */
-/* ---------------------------------------------------------------- */
 .field-error {
   color: var(--red-700);
   background: var(--red-100);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 0.9rem;
-  margin-top: 12px;
+  margin: 12px 0 0;
   font-weight: 600;
 }
 
 /* ---------------------------------------------------------------- */
-/* Result: rejected / quality-gate failure                           */
+/* Verdict card                                                      */
 /* ---------------------------------------------------------------- */
-.reject-icon { font-size: 2.5rem; text-align: center; }
-#rejectedView h2, #notConfiguredCard h2 { text-align: center; margin: 6px 0; }
-.reject-reason {
-  text-align: center;
-  font-size: 1.05rem;
-  color: var(--grey-900);
-  font-weight: 600;
-}
-.reject-score-label { text-align: center; color: var(--grey-700); font-size: 0.9rem; }
-
-/* ---------------------------------------------------------------- */
-/* Detections / tally                                                */
-/* ---------------------------------------------------------------- */
-
-/* The analysed photo with a box drawn around each detection (see
-   drawDetections in app.js) -- the canvas is sized to the photo's actual
-   pixel dimensions in JS and then just scaled down to fit here. */
-.result-image-wrap { text-align: center; margin-bottom: 16px; }
-.result-image-wrap[hidden] { display: none; }
-#resultCanvas { max-width: 100%; height: auto; border-radius: 10px; }
-
-.section-heading { font-size: 1rem; margin: 20px 0 8px; }
-
-.tally { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.tally-chip {
-  background: var(--grey-100);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 0.85rem;
+.verdict-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
   font-weight: 700;
+  border: 1px solid transparent;
 }
+.verdict-banner[hidden] { display: none; }
+.verdict-banner .verdict-icon { font-size: 1.6rem; line-height: 1; }
+.verdict-banner .verdict-text { display: flex; flex-direction: column; gap: 2px; }
+.verdict-banner .verdict-sub { font-size: 0.85rem; font-weight: 500; color: var(--grey-700); }
+.verdict-banner.confirmed { background: var(--green-100); color: var(--green-700); border-color: var(--green-600); }
+.verdict-banner.uncertain { background: var(--amber-100); color: var(--amber-700); border-color: var(--amber-700); }
+.verdict-banner.none { background: var(--grey-100); color: var(--grey-900); border-color: var(--grey-300); }
+
+.rejected { background: var(--amber-100); border: 1px solid var(--amber-700); border-radius: 12px; padding: 12px 14px; }
+.rejected[hidden] { display: none; }
+.reject-title { margin: 0 0 4px; font-weight: 800; color: var(--amber-700); }
+.reject-reason { margin: 0 0 6px; font-weight: 600; }
+.reject-score-label { margin: 0; color: var(--grey-700); font-size: 0.85rem; }
+.reject-icon { font-size: 2.5rem; text-align: center; }
+#notConfiguredCard h2 { text-align: center; margin: 6px 0; }
+
+/* ---------------------------------------------------------------- */
+/* Detections                                                        */
+/* ---------------------------------------------------------------- */
+.section-heading { font-size: 0.78rem; margin: 4px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--grey-500); }
+.tally { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.tally-chip { background: var(--grey-100); border-radius: 999px; padding: 6px 12px; font-size: 0.85rem; font-weight: 700; }
 .tally-chip.pest { background: var(--red-100); color: var(--red-700); }
 .tally-chip.beneficial { background: var(--green-100); color: var(--green-700); }
 .tally-chip.neutral { background: var(--grey-100); color: var(--grey-700); }
 
-.detection-list { display: flex; flex-direction: column; gap: 10px; }
+.no-specimen {
+  text-align: center;
+  padding: 18px 12px;
+  border: 1px dashed var(--grey-300);
+  border-radius: 12px;
+  color: var(--grey-700);
+  background: var(--surface-2);
+}
+.no-specimen-icon { font-size: 1.8rem; margin-bottom: 4px; }
+.no-specimen h3 { margin: 4px 0 6px; color: var(--grey-900); font-size: 1rem; }
+.no-specimen p { margin: 0 0 6px; font-size: 0.9rem; }
+.no-specimen-row { border-style: dashed; color: var(--grey-700); }
+.status-tag.none { background: var(--grey-100); color: var(--grey-500); }
 
-.detection-row {
-  border: 1px solid var(--grey-300);
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-.detection-row-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.detection-name { font-weight: 700; text-transform: capitalize; }
+.detection-list { display: flex; flex-direction: column; gap: 10px; }
+.detection-row { border: 1px solid var(--grey-300); border-radius: 12px; padding: 12px 14px; background: var(--surface-2); }
+.detection-row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.detection-name { font-weight: 800; text-transform: capitalize; font-size: 1.02rem; }
 .status-tag {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   padding: 2px 7px;
@@ -325,60 +485,29 @@ summary:focus-visible {
 .status-tag.pest { background: var(--red-100); color: var(--red-700); }
 .status-tag.beneficial { background: var(--green-100); color: var(--green-700); }
 .status-tag.neutral { background: var(--grey-100); color: var(--grey-700); }
+.flagged-tag { font-size: 0.7rem; font-weight: 700; color: var(--blue-700); background: var(--blue-100); padding: 2px 7px; border-radius: 999px; }
 
-.flagged-tag {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--blue-700);
-  background: var(--blue-100);
-  padding: 2px 7px;
-  border-radius: 999px;
-}
-
-/* Confidence bar with a visible tick at the 0.75 hard-rule threshold --
-   the threshold must be visually obvious, not just implied by colour. */
-.confidence-bar-wrap {
-  position: relative;
-  height: 10px;
-  background: var(--grey-100);
-  border-radius: 999px;
-  overflow: visible;
-}
-.confidence-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: var(--green-600);
-}
+.confidence-bar-wrap { position: relative; height: 10px; background: var(--grey-100); border-radius: 999px; overflow: visible; }
+.confidence-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--green-600), var(--green-700)); transition: width 0.4s ease-out; }
 .confidence-bar-fill.below-threshold { background: var(--grey-500); }
-.confidence-threshold-tick {
-  position: absolute;
-  top: -3px;
-  bottom: -3px;
-  left: 75%;
-  width: 2px;
-  background: var(--grey-900);
-}
-.confidence-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.78rem;
-  color: var(--grey-700);
-  margin-top: 4px;
-}
+.confidence-threshold-tick { position: absolute; top: -3px; bottom: -3px; left: 75%; width: 2px; background: var(--grey-900); }
+.confidence-label { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--grey-700); margin-top: 4px; }
+.runner-up-note { font-size: 0.78rem; color: var(--grey-500); font-style: italic; margin-top: 6px; }
 
-.runner-up-note {
-  font-size: 0.78rem;
-  color: var(--grey-500);
-  font-style: italic;
-  margin-top: 6px;
-}
+/* ---------------------------------------------------------------- */
+/* Species reference + facts                                         */
+/* ---------------------------------------------------------------- */
+.supported-groups { display: flex; flex-direction: column; gap: 12px; }
+.species-group-heading { font-size: 0.75rem; font-weight: 700; color: var(--grey-700); margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.species-chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.species-chip { font-size: 0.84rem; font-weight: 600; padding: 5px 11px; border-radius: 999px; text-transform: capitalize; border: 1px solid transparent; }
+.species-chip.pest { background: var(--red-100); color: var(--red-700); border-color: #f3c2c2; }
+.species-chip.beneficial { background: var(--green-100); color: var(--green-700); border-color: #bfe3c3; }
+.species-chip.neutral { background: var(--grey-100); color: var(--grey-700); border-color: var(--grey-300); }
 
-.latency-note {
-  text-align: center;
-  font-size: 0.78rem;
-  color: var(--grey-500);
-  margin-top: 14px;
-}
+.facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 0.9rem; }
+.facts dt { color: var(--grey-500); font-weight: 600; white-space: nowrap; }
+.facts dd { margin: 0; color: var(--grey-900); }
 
 .footer {
   max-width: var(--max-width);
@@ -388,10 +517,8 @@ summary:focus-visible {
   font-size: 0.8rem;
   text-align: center;
 }
+code { background: var(--grey-100); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
 
-code {
-  background: var(--grey-100);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 0.9em;
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation-duration: 0.01ms !important; }
 }
