@@ -11,6 +11,12 @@ from dataclasses import dataclass
 
 import numpy as np
 import onnxruntime as ort
+
+# ONNX Runtime probes the host for GPUs at startup and logs a warning when it
+# finds none (the case on every CPU-only container, e.g. Render). We only
+# ever request CPUExecutionProvider, so raise the default logger to ERROR to
+# keep that noise out of the service logs.
+ort.set_default_logger_severity(3)
 from PIL import Image
 
 from . import imageops

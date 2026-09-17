@@ -246,7 +246,7 @@ class HealthResponse(BaseModel):
 # --------------------------------------------------------------------- #
 # Routes
 # --------------------------------------------------------------------- #
-@app.get("/api/v1/health", response_model=HealthResponse)
+@app.api_route("/api/v1/health", methods=["GET", "HEAD"], response_model=HealthResponse)
 def health():
     cfg = get_species_cfg()
     return HealthResponse(
@@ -373,7 +373,10 @@ def _run_models(img, mode: str):
     return detections_out, top_predictions_out, whole_image_verdict
 
 
-@app.get("/")
+# HEAD as well as GET: hosting platforms (Render's port probe, uptime
+# monitors) send HEAD requests, and a 405 in the logs for every probe is
+# noise that looks like a fault.
+@app.api_route("/", methods=["GET", "HEAD"])
 def index():
     index_path = config.STATIC_DIR / "index.html"
     if index_path.exists():
